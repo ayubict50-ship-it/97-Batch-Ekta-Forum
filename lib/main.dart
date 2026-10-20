@@ -1139,56 +1139,70 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     );
   }
 
-  void _sendSmsDialog(Member member) {
-    double todayDeposit = member.lastDepositAmount;
-    double previousDeposit = member.previousDepositAmount;
-    double totalDeposit = member.deposit;
-    double due = member.dueAmount;
+ void _sendSmsDialog(Member member) {
+  double todayDeposit = member.lastDepositAmount;
+  double previousDeposit = member.previousDepositAmount;
+  double totalDeposit = member.deposit;
+  double due = member.dueAmount;
 
-    String smsMessage =
-        "প্রিয় ${member.name}, আজকে আপনি ${todayDeposit.toStringAsFixed(0)} টাকা জমা দিলেন। আগের জমা ছিল ${previousDeposit.toStringAsFixed(0)} টাকা। মোট হলো ${totalDeposit.toStringAsFixed(0)} টাকা। বকেয়া ${due.toStringAsFixed(0)} টাকা। ধন্যবাদ, $globalSocietyName।";
+  String smsMessage =
+      "প্রিয় ${member.name}, আজকে আপনি ${todayDeposit.toStringAsFixed(0)} টাকা জমা দিলেন। আগের জমা ছিল ${previousDeposit.toStringAsFixed(0)} টাকা। মোট হলো ${totalDeposit.toStringAsFixed(0)} টাকা। বকেয়া ${due.toStringAsFixed(0)} টাকা। ধন্যবাদ, $globalSocietyName";
 
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text("${member.name}-কে SMS পাঠান"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text("প্রাপক নম্বর: ${member.mobile}", style: const TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: SelectableText(
-                smsMessage,
-                style: const TextStyle(fontSize: 13, height: 1.4),
-              ),
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text("${member.name}-কে SMS পাঠান"),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("প্রাপক নম্বর: ${member.mobile}", style: const TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade300),
             ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
-            onPressed: () {
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text("${member.mobile} নম্বরে SMS পাঠানো হয়েছে!")),
-              );
-            },
-            icon: const Icon(Icons.send, size: 16),
-            label: const Text("SMS পাঠান"),
+            child: SelectableText(
+              smsMessage,
+              style: const TextStyle(fontSize: 13, height: 1.4),
+            ),
           ),
         ],
       ),
-    );
-  }
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text("বাতিল"),
+        ),
+        ElevatedButton.icon(
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+          onPressed: () async {
+            Navigator.pop(ctx);
+            final Uri smsUri = Uri(
+              scheme: 'sms',
+              path: member.mobile,
+              queryParameters: <String, String>{
+                'body': smsMessage,
+              },
+            );
+            if (await canLaunchUrl(smsUri)) {
+              await launchUrl(smsUri);
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("SMS অ্যাপ ওপেন করা যায়নি")),
+              );
+            }
+          },
+          icon: const Icon(Icons.send, size: 16),
+          label: const Text("SMS পাঠাতেন"),
+        ),
+      ],
+    ),
+  );
+}
 
   void _showMemberStatementDialog(Member member) {
     showDialog(
