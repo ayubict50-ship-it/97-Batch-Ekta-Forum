@@ -1156,10 +1156,10 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("প্রাপক নম্বর: ${member.mobile}", style: const TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
+          Text("প্রাপক নম্বর: ${member.mobile}", style:  TextStyle(fontWeight: FontWeight.bold)),
+           SizedBox(height: 10),
           Container(
-            padding: const EdgeInsets.all(12),
+            padding:  EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Colors.grey.shade100,
               borderRadius: BorderRadius.circular(8),
@@ -1167,7 +1167,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
             ),
             child: SelectableText(
               smsMessage,
-              style: const TextStyle(fontSize: 13, height: 1.4),
+              style:  TextStyle(fontSize: 13, height: 1.4),
             ),
           ),
         ],
@@ -1175,7 +1175,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx),
-          child: const Text("বাতিল"),
+          child:  Text("বাতিল"),
         ),
         ElevatedButton.icon(
           style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
@@ -1192,12 +1192,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               await launchUrl(smsUri);
             } else {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("SMS অ্যাপ ওপেন করা যায়নি")),
+                 SnackBar(content: Text("SMS অ্যাপ ওপেন করা যায়নি")),
               );
             }
           },
-          icon: const Icon(Icons.send, size: 16),
-          label: const Text("SMS পাঠাতেন"),
+          icon:  Icon(Icons.send, size: 16),
+          label:  Text("SMS পাঠাতেন"),
         ),
       ],
     ),
