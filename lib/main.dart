@@ -1464,30 +1464,57 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       ),
                     ),
                   )
-                : ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: globalMembers.length,
-                    itemBuilder: (context, index) {
-                      final member = globalMembers[index];
-                      return Card(
-                        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: Colors.green,
-                            child: Text(member.id, style: const TextStyle(color: Colors.white, fontSize: 12)),
-                          ),
-                          title: Text(member.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text("জমা: ${member.deposit}৳ | সর্বমোট ব্যালেন্স: ${member.totalBalance.toStringAsFixed(1)}৳"),
-                              if (member.dueAmount > 0)
-                                Text("বকেয়া: ${member.dueMonthsCount} মাস (${member.dueAmount.toStringAsFixed(0)}৳)", style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold))
-                              else if (member.advanceAmount > 0)
-                                Text("অতিরিক্ত জমা (Advance): ${member.advanceAmount.toStringAsFixed(0)}৳", style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold))
-                              else
-                                const Text("বকেয়া: ৳০ (পরিশোধিত)", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+               ListView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: globalMembers.length,
+        itemBuilder: (context, index) {
+          final member = globalMembers[index];
+          return Card(
+            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: Padding(
+              padding: const EdgeInsets.all(10.0),
+              child: Row(
+                children: [
+                  // ১. আইডি ও নাম
+                  Expanded(
+                    flex: 3,
+                    child: Text(
+                      "${member.id}. ${member.name}",
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  // ২. জমা
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      "জমা: ${member.deposit}৳",
+                      style: const TextStyle(fontSize: 11, color: Colors.green),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  // ৩. বকেয়া/ডিউ
+                  Expanded(
+                    flex: 3,
+                    child: Text(
+                      member.dueAmount > 0 
+                          ? "বকেয়া: ${member.dueAmount.toStringAsFixed(0)}৳" 
+                          : "বকেয়া: ০৳ (পরিশোধিত)",
+                      style: TextStyle(
+                        fontSize: 11, 
+                        color: member.dueAmount > 0 ? Colors.red : Colors.green,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      )
                             ],
                           ),
                           trailing: Row(
