@@ -3,8 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
   runApp(const SamobayApp());
 }
 
@@ -24,6 +28,20 @@ class InstallmentSlab {
     required this.endDate,
     required this.amount,
   });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'startDate': startDate.toIso8601String(),
+        'endDate': endDate.toIso8601String(),
+        'amount': amount,
+      };
+
+  factory InstallmentSlab.fromJson(Map<String, dynamic> json) => InstallmentSlab(
+        id: json['id'],
+        startDate: DateTime.parse(json['startDate']),
+        endDate: DateTime.parse(json['endDate']),
+        amount: (json['amount'] as num).toDouble(),
+      );
 }
 
 List<InstallmentSlab> globalInstallmentSlabs = [
@@ -53,7 +71,7 @@ class SamobayApp extends StatelessWidget {
         primarySwatch: Colors.green,
         useMaterial3: true,
       ),
-      home: const LoginScreen(),
+      home: const SplashScreen(),
     );
   }
 }
@@ -72,6 +90,22 @@ class BusinessRecord {
     required this.isIncome,
     required this.date,
   });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'amount': amount,
+        'isIncome': isIncome,
+        'date': date.toIso8601String(),
+      };
+
+  factory BusinessRecord.fromJson(Map<String, dynamic> json) => BusinessRecord(
+        id: json['id'],
+        title: json['title'],
+        amount: (json['amount'] as num).toDouble(),
+        isIncome: json['isIncome'],
+        date: DateTime.parse(json['date']),
+      );
 }
 
 class TransactionHistory {
@@ -88,6 +122,22 @@ class TransactionHistory {
     this.trxId = '',
     this.isProfit = false,
   });
+
+  Map<String, dynamic> toJson() => {
+        'date': date.toIso8601String(),
+        'amount': amount,
+        'paymentMethod': paymentMethod,
+        'trxId': trxId,
+        'isProfit': isProfit,
+      };
+
+  factory TransactionHistory.fromJson(Map<String, dynamic> json) => TransactionHistory(
+        date: DateTime.parse(json['date']),
+        amount: (json['amount'] as num).toDouble(),
+        paymentMethod: json['paymentMethod'],
+        trxId: json['trxId'] ?? '',
+        isProfit: json['isProfit'] ?? false,
+      );
 }
 
 class Member {
@@ -146,10 +196,89 @@ class Member {
     double currentRate = globalInstallmentSlabs.last.amount;
     return (dueAmount / currentRate).ceil();
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'mobile': mobile,
+        'pin': pin,
+        'deposit': deposit,
+        'profitEarned': profitEarned,
+        'joinDate': joinDate.toIso8601String(),
+        'transactions': transactions.map((t) => t.toJson()).toList(),
+      };
+
+  factory Member.fromJson(Map<String, dynamic> json) => Member(
+        id: json['id'],
+        name: json['name'],
+        mobile: json['mobile'],
+        pin: json['pin'],
+        deposit: (json['deposit'] as num).toDouble(),
+        profitEarned: (json['profitEarned'] as num).toDouble(),
+        joinDate: DateTime.parse(json['joinDate']),
+        transactions: (json['transactions'] as List).map((t) => TransactionHistory.fromJson(t)).toList(),
+      );
 }
 
 List<Member> globalMembers = [];
 List<BusinessRecord> globalBusinessRecords = [];
+
+// ক্লাউড অটো-সিঙ্ক সার্ভিস
+class CloudDatabaseService {
+  static final _db = FirebaseFirestore.instance;
+
+  static Future<void> syncAllDataToCloud() async {
+    try {
+      List<Map<String, dynamic>> membersData = globalMembers.map((m) => m.toJson()).toList();
+      await _db.collection('society_data').doc('members').set({'list': membersData});
+
+      List<Map<String, dynamic>> bizData = globalBusinessRecords.map((b) => b.toJson()).toList();
+      await _db.collection('society_data').doc('business').set({'list': bizData});
+
+      List<Map<String, dynamic>> slabData = globalInstallmentSlabs.map((s) => s.toJson()).toList();
+      await _db.collection('society_data').doc('slabs').set({'list': slabData});
+
+      await _db.collection('society_data').doc('settings').set({
+        'societyName': globalSocietyName,
+        'adminId': globalAdminId,
+        'adminPassword': globalAdminPassword,
+      });
+    } catch (e) {
+      debugPrint("Cloud Sync Error: $e");
+    }
+  }
+
+  static Future<void> loadDataFromCloud() async {
+    try {
+      var membersDoc = await _db.collection('society_data').doc('members').get();
+      if (membersDoc.exists && membersDoc.data()?['list'] != null) {
+        List l = membersDoc.data()!['list'];
+        globalMembers = l.map((m) => Member.fromJson(m)).toList();
+      }
+
+      var bizDoc = await _db.collection('society_data').doc('business').get();
+      if (bizDoc.exists && bizDoc.data()?['list'] != null) {
+        List l = bizDoc.data()!['list'];
+        globalBusinessRecords = l.map((b) => BusinessRecord.fromJson(b)).toList();
+      }
+
+      var slabDoc = await _db.collection('society_data').doc('slabs').get();
+      if (slabDoc.exists && slabDoc.data()?['list'] != null) {
+        List l = slabDoc.data()!['list'];
+        globalInstallmentSlabs = l.map((s) => InstallmentSlab.fromJson(s)).toList();
+      }
+
+      var settingsDoc = await _db.collection('society_data').doc('settings').get();
+      if (settingsDoc.exists) {
+        globalSocietyName = settingsDoc.data()?['societyName'] ?? globalSocietyName;
+        globalAdminId = settingsDoc.data()?['adminId'] ?? globalAdminId;
+        globalAdminPassword = settingsDoc.data()?['adminPassword'] ?? globalAdminPassword;
+      }
+    } catch (e) {
+      debugPrint("Cloud Load Error: $e");
+    }
+  }
+}
 
 class SamobayFinance {
   static double get totalBusinessIncome {
@@ -170,7 +299,6 @@ class SamobayFinance {
   }
 }
 
-// ফোনে ডাউনলোড ফোল্ডারে ফাইল সেভ করার ফাংশন
 Future<void> saveReportToFile(BuildContext context, String fileName, String content) async {
   try {
     Directory? directory;
@@ -201,6 +329,47 @@ Future<void> saveReportToFile(BuildContext context, String fileName, String cont
         SnackBar(content: Text("ফাইল সেভ হয়েছে: ${file.path}")),
       );
     }
+  }
+}
+
+class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
+
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> {
+  @override
+  void initState() {
+    super.initState();
+    _initApp();
+  }
+
+  Future<void> _initApp() async {
+    await CloudDatabaseService.loadDataFromCloud();
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: Colors.green),
+            SizedBox(height: 15),
+            Text("ক্লাউড ব্যাকআপ থেকে লোড হচ্ছে...", style: TextStyle(color: Colors.grey)),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -393,16 +562,19 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-            onPressed: () {
+            onPressed: () async {
               if (adminIdController.text.trim().isNotEmpty && adminPassController.text.trim().isNotEmpty) {
                 setState(() {
                   globalAdminId = adminIdController.text.trim();
                   globalAdminPassword = adminPassController.text.trim();
                 });
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("ম্যানেজার আইডি ও পাসওয়ার্ড সফলভাবে আপডেট করা হয়েছে!")),
-                );
+                await CloudDatabaseService.syncAllDataToCloud();
+                if (mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("ম্যানেজার আইডি ও পাসওয়ার্ড সফলভাবে আপডেট ও ক্লাউডে সেভ হয়েছে!")),
+                  );
+                }
               }
             },
             child: const Text("আপডেট করুন"),
@@ -477,20 +649,22 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                       IconButton(
                                         icon: const Icon(Icons.edit, color: Colors.teal, size: 20),
                                         onPressed: () {
-                                          _showEditSlabDialog(context, slab, () {
+                                          _showEditSlabDialog(context, slab, () async {
                                             setDialogState(() {});
                                             setState(() {});
+                                            await CloudDatabaseService.syncAllDataToCloud();
                                           });
                                         },
                                         tooltip: "এই স্লাবটি সংশোধন করুন",
                                       ),
                                       IconButton(
                                         icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                                        onPressed: () {
+                                        onPressed: () async {
                                           setDialogState(() {
                                             globalInstallmentSlabs.removeWhere((s) => s.id == slab.id);
                                           });
                                           setState(() {});
+                                          await CloudDatabaseService.syncAllDataToCloud();
                                         },
                                         tooltip: "মুছে ফেলুন",
                                       ),
@@ -504,9 +678,10 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
                       onPressed: () {
-                        _showAddNewSlabDialog(context, () {
+                        _showAddNewSlabDialog(context, () async {
                           setDialogState(() {});
                           setState(() {});
+                          await CloudDatabaseService.syncAllDataToCloud();
                         });
                       },
                       icon: const Icon(Icons.add, size: 16),
@@ -520,15 +695,18 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                onPressed: () {
+                onPressed: () async {
                   if (societyNameController.text.trim().isNotEmpty) {
                     setState(() {
                       globalSocietyName = societyNameController.text.trim();
                     });
-                    Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("সেটিংস সফলভাবে আপডেট হয়েছে!")),
-                    );
+                    await CloudDatabaseService.syncAllDataToCloud();
+                    if (mounted) {
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("সেটিংস সফলভাবে আপডেট ও ক্লাউডে সেভ হয়েছে!")),
+                      );
+                    }
                   }
                 },
                 child: const Text("সংরক্ষণ করুন"),
@@ -767,7 +945,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                   backgroundColor: isIncome ? Colors.green : Colors.red,
                   foregroundColor: Colors.white,
                 ),
-                onPressed: () {
+                onPressed: () async {
                   double? amt = double.tryParse(amountController.text.trim());
                   if (titleController.text.isNotEmpty && amt != null && amt > 0) {
                     setState(() {
@@ -781,10 +959,13 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                         ),
                       );
                     });
-                    Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("${titleController.text} এর পোস্টিং সফল হয়েছে!")),
-                    );
+                    await CloudDatabaseService.syncAllDataToCloud();
+                    if (mounted) {
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("${titleController.text} এর পোস্টিং সফল হয়েছে এবং ক্লাউডে সেভ হয়েছে!")),
+                      );
+                    }
                   }
                 },
                 child: const Text("পোস্টিং দিন"),
@@ -796,6 +977,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     );
   }
 
+  // লাভ-ক্ষতির খতিয়ান ভিউ (সদস্যদের তালিকার মতো পাশাপাশি কার্ড স্টাইল)
   void _showManageBusinessRecordsDialog() {
     showDialog(
       context: context,
@@ -844,42 +1026,55 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                             itemBuilder: (context, index) {
                               final record = globalBusinessRecords[index];
                               return Card(
-                                margin: const EdgeInsets.symmetric(vertical: 4),
-                                child: ListTile(
-                                  dense: true,
-                                  leading: CircleAvatar(
-                                    backgroundColor: record.isIncome ? Colors.green.shade100 : Colors.red.shade100,
-                                    child: Icon(
-                                      record.isIncome ? Icons.arrow_upward : Icons.arrow_downward,
-                                      color: record.isIncome ? Colors.green : Colors.red,
-                                      size: 18,
-                                    ),
-                                  ),
-                                  title: Text(record.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                  subtitle: Text("তারিখ: ${record.date.day}/${record.date.month}/${record.date.year} | ধরন: ${record.isIncome ? 'লাভ (+)' : 'প্রজেক্ট খরচ (-)'}"),
-                                  trailing: Row(
-                                    mainAxisSize: MainAxisSize.min,
+                                margin: const EdgeInsets.symmetric(vertical: 6),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(10.0),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Text(
-                                        "${record.isIncome ? '+' : '-'}৳${record.amount.toStringAsFixed(0)}",
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14,
-                                          color: record.isIncome ? Colors.green : Colors.red,
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              record.title,
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              "তারিখ: ${record.date.day}/${record.date.month}/${record.date.year} | ধরন: ${record.isIncome ? 'লাভ (+)' : 'খরচ (-)'}",
+                                              style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                      IconButton(
-                                        icon: const Icon(Icons.delete, color: Colors.red, size: 18),
-                                        onPressed: () {
-                                          setState(() {
-                                            globalBusinessRecords.removeWhere((r) => r.id == record.id);
-                                          });
-                                          setDialogState(() {});
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(content: Text("${record.title} মুছে ফেলা হয়েছে!")),
-                                          );
-                                        },
-                                        tooltip: "এন্ট্রি ডিলিট করুন",
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            "${record.isIncome ? '+' : '-'}৳${record.amount.toStringAsFixed(0)}",
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 15,
+                                              color: record.isIncome ? Colors.green : Colors.red,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          IconButton(
+                                            icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                                            onPressed: () async {
+                                              setState(() {
+                                                globalBusinessRecords.removeWhere((r) => r.id == record.id);
+                                              });
+                                              await CloudDatabaseService.syncAllDataToCloud();
+                                              setDialogState(() {});
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(content: Text("${record.title} মুছে ফেলা হয়েছে!")),
+                                              );
+                                            },
+                                            tooltip: "এন্ট্রি ডিলিট করুন",
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
@@ -919,7 +1114,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     );
   }
 
-  void _distributeNetProfit() {
+  void _distributeNetProfit() async {
     double netP = SamobayFinance.netProfit;
     double totalDepositCapital = totalCollection;
 
@@ -947,9 +1142,13 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       }
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("নতুন প্রজেক্টের ৳${netP.toStringAsFixed(2)} লাভ বর্তমান মূলধনের অনুপাতে ন্যায়সংগতভাবে বণ্টন সম্পন্ন!")),
-    );
+    await CloudDatabaseService.syncAllDataToCloud();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("নতুন প্রজেক্টের ৳${netP.toStringAsFixed(2)} লাভ বর্তমান মূলধনের অনুপাতে ন্যায়সংগতভাবে বণ্টন ও ক্লাউডে সেভ সম্পন্ন!")),
+      );
+    }
   }
 
   Future<void> _launchSmsApp(String phoneNumber, String message) async {
@@ -1109,7 +1308,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                onPressed: () {
+                onPressed: () async {
                   double? amt = double.tryParse(amountController.text.trim());
                   if (amt != null && amt > 0) {
                     setState(() {
@@ -1122,8 +1321,11 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                         ),
                       );
                     });
-                    Navigator.pop(ctx);
-                    _sendSmsDialog(member);
+                    await CloudDatabaseService.syncAllDataToCloud();
+                    if (mounted) {
+                      Navigator.pop(ctx);
+                      _sendSmsDialog(member);
+                    }
                   }
                 },
                 child: const Text("জমা দিন ও SMS পাঠান"),
@@ -1157,13 +1359,19 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               setState(() {
                 member.name = nameController.text.trim();
                 member.mobile = mobileController.text.trim();
                 member.deposit = double.tryParse(depositController.text) ?? member.deposit;
               });
-              Navigator.pop(ctx);
+              await CloudDatabaseService.syncAllDataToCloud();
+              if (mounted) {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("সদস্যের তথ্য আপডেট ও ক্লাউডে সেভ হয়েছে!")),
+                );
+              }
             },
             child: const Text("আপডেট করুন"),
           ),
@@ -1186,15 +1394,18 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               if (pinController.text.trim().isNotEmpty) {
                 setState(() {
                   member.pin = pinController.text.trim();
                 });
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("পিন সফলভাবে আপডেট হয়েছে!")),
-                );
+                await CloudDatabaseService.syncAllDataToCloud();
+                if (mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("পিন সফলভাবে আপডেট ও ক্লাউডে সেভ হয়েছে!")),
+                  );
+                }
               }
             },
             child: const Text("সেভ করুন"),
@@ -1436,7 +1647,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
               ElevatedButton(
-                onPressed: () {
+                onPressed: () async {
                   if (_nameController.text.trim().isNotEmpty && _mobileController.text.trim().isNotEmpty) {
                     double initDeposit = double.tryParse(_initialDepositController.text.trim()) ?? 0.0;
                     List<TransactionHistory> initTx = [];
@@ -1461,7 +1672,8 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                         ),
                       );
                     });
-                    Navigator.pop(ctx);
+                    await CloudDatabaseService.syncAllDataToCloud();
+                    if (mounted) Navigator.pop(ctx);
                   }
                 },
                 child: const Text("সংরক্ষণ"),
@@ -1713,16 +1925,19 @@ class _MemberDashboardState extends State<MemberDashboard> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               if (oldPinController.text == widget.member.pin) {
                 if (newPinController.text.trim().isNotEmpty) {
                   setState(() {
                     widget.member.pin = newPinController.text.trim();
                   });
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("আপনার পিন সফলভাবে পরিবর্তন করা হয়েছে!")),
-                  );
+                  await CloudDatabaseService.syncAllDataToCloud();
+                  if (mounted) {
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("আপনার পিন সফলভাবে পরিবর্তন ও ক্লাউডে সেভ হয়েছে!")),
+                    );
+                  }
                 }
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -1861,7 +2076,7 @@ class _MemberDashboardState extends State<MemberDashboard> {
                   backgroundColor: _selectedMethod == 'bKash' ? Colors.pink : Colors.blue,
                   foregroundColor: Colors.white,
                 ),
-                onPressed: () {
+                onPressed: () async {
                   double? amount = double.tryParse(_amountController.text.trim());
                   if (amount != null && amount > 0 && _trxController.text.isNotEmpty) {
                     setState(() {
@@ -1875,10 +2090,13 @@ class _MemberDashboardState extends State<MemberDashboard> {
                         ),
                       );
                     });
-                    Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("৳$amount টাকা সঞ্চয় জমা হিসেবে রেকর্ড করা হয়েছে!")),
-                    );
+                    await CloudDatabaseService.syncAllDataToCloud();
+                    if (mounted) {
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("৳$amount টাকা সঞ্চয় জমা হিসেবে রেকর্ড ও ক্লাউডে সেভ হয়েছে!")),
+                      );
+                    }
                   }
                 },
                 child: const Text("জমা কনফার্ম করুন"),
