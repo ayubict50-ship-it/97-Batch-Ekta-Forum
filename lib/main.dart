@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 void main() {
   runApp(const SamobayApp());
@@ -1139,73 +1140,71 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     );
   }
 
- void _sendSmsDialog(Member member) {
-  double todayDeposit = member.lastDepositAmount;
-  double previousDeposit = member.previousDepositAmount;
-  double totalDeposit = member.deposit;
-  double due = member.dueAmount;
+  void _sendSmsDialog(Member member) {
+    double todayDeposit = member.lastDepositAmount;
+    double previousDeposit = member.previousDepositAmount;
+    double totalDeposit = member.deposit;
+    double due = member.dueAmount;
 
-  String smsMessage =
-      "প্রিয় ${member.name}, আজকে আপনি ${todayDeposit.toStringAsFixed(0)} টাকা জমা দিলেন। আগের জমা ছিল ${previousDeposit.toStringAsFixed(0)} টাকা। মোট হলো ${totalDeposit.toStringAsFixed(0)} টাকা। বকেয়া ${due.toStringAsFixed(0)} টাকা। ধন্যবাদ, $globalSocietyName";
+    String smsMessage =
+        "প্রিয় ${member.name}, আজকে আপনি ${todayDeposit.toStringAsFixed(0)} টাকা জমা দিলেন। আগের জমা ছিল ${previousDeposit.toStringAsFixed(0)} টাকা। মোট হলো ${totalDeposit.toStringAsFixed(0)} টাকা। বকেয়া ${due.toStringAsFixed(0)} টাকা। ধন্যবাদ, $globalSocietyName।";
 
-  showDialog(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text("${member.name}-কে SMS পাঠান"),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text("প্রাপক নম্বর: ${member.mobile}", style: TextStyle(fontWeight: FontWeight.bold)),
-          SizedBox(height: 10),
-          Container(
-            padding: EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.grey.shade300),
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text("${member.name}-কে SMS পাঠান"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("প্রাপক নম্বর: ${member.mobile}", style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: SelectableText(
+                smsMessage,
+                style: const TextStyle(fontSize: 13, height: 1.4),
+              ),
             ),
-            child: SelectableText(
-              smsMessage,
-              style: TextStyle(fontSize: 13, height: 1.4),
-            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("বাতিল"),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final Uri smsUri = Uri(
+                scheme: 'sms',
+                path: member.mobile,
+                queryParameters: <String, String>{
+                  'body': smsMessage,
+                },
+              );
+              if (await canLaunchUrl(smsUri)) {
+                await launchUrl(smsUri);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("SMS অ্যাপ ওপেন করা যায়নি")),
+                );
+              }
+            },
+            icon: const Icon(Icons.send, size: 16),
+            label: const Text("SMS পাঠান"),
           ),
         ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx),
-          child: Text("বাতিল"),
-        ),
-        ElevatedButton.icon(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blue,
-            foregroundColor: Colors.white,
-          ),
-          onPressed: () async {
-            Navigator.pop(ctx);
-            final Uri smsUri = Uri(
-              scheme: 'sms',
-              path: member.mobile,
-              queryParameters: <String, String>{
-                'body': smsMessage,
-              },
-            );
-            if (await canLaunchUrl(smsUri)) {
-              await launchUrl(smsUri);
-            } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text("SMS অ্যাপ ওপেন করা যায়নি")),
-              );
-            }
-          },
-          icon: Icon(Icons.send, size: 16),
-          label: Text("SMS পাঠান"),
-        ),
-      ],
-    ),
-  );
-}
+    );
+  }
+
   void _showMemberStatementDialog(Member member) {
     showDialog(
       context: context,
@@ -1480,57 +1479,30 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       ),
                     ),
                   )
-               ListView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: globalMembers.length,
-        itemBuilder: (context, index) {
-          final member = globalMembers[index];
-          return Card(
-            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: Padding(
-              padding: const EdgeInsets.all(10.0),
-              child: Row(
-                children: [
-                  // ১. আইডি ও নাম
-                  Expanded(
-                    flex: 3,
-                    child: Text(
-                      "${member.id}. ${member.name}",
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  // ২. জমা
-                  Expanded(
-                    flex: 2,
-                    child: Text(
-                      "জমা: ${member.deposit}৳",
-                      style: const TextStyle(fontSize: 11, color: Colors.green),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                  // ৩. বকেয়া/ডিউ
-                  Expanded(
-                    flex: 3,
-                    child: Text(
-                      member.dueAmount > 0 
-                          ? "বকেয়া: ${member.dueAmount.toStringAsFixed(0)}৳" 
-                          : "বকেয়া: ০৳ (পরিশোধিত)",
-                      style: TextStyle(
-                        fontSize: 11, 
-                        color: member.dueAmount > 0 ? Colors.red : Colors.green,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      )
+                : ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: globalMembers.length,
+                    itemBuilder: (context, index) {
+                      final member = globalMembers[index];
+                      return Card(
+                        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: Colors.green,
+                            child: Text(member.id, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                          ),
+                          title: Text(member.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text("জমা: ${member.deposit}৳ | সর্বমোট ব্যালেন্স: ${member.totalBalance.toStringAsFixed(1)}৳"),
+                              if (member.dueAmount > 0)
+                                Text("বকেয়া: ${member.dueMonthsCount} মাস (${member.dueAmount.toStringAsFixed(0)}৳)", style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold))
+                              else if (member.advanceAmount > 0)
+                                Text("অতিরিক্ত জমা (Advance): ${member.advanceAmount.toStringAsFixed(0)}৳", style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold))
+                              else
+                                const Text("বকেয়া: ৳০ (পরিশোধিত)", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
                             ],
                           ),
                           trailing: Row(
