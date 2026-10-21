@@ -1,17 +1,17 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 void main() {
   runApp(const SamobayApp());
 }
 
-// গ্লোবাল ভ্যারিয়েবল (সমিতির স্থায়ী নাম এবং অ্যাডমিন আইডি/পাসওয়ার্ড)
 String globalSocietyName = '৯৭ ব্যাচ একতা ফোরাম';
 String globalAdminId = 'admin';
 String globalAdminPassword = '1234';
 
-// কিস্তির মেয়াদের স্লাব মডেল
 class InstallmentSlab {
   final String id;
   DateTime startDate;
@@ -26,7 +26,6 @@ class InstallmentSlab {
   });
 }
 
-// ডাইনামিক স্লাব তালিকা
 List<InstallmentSlab> globalInstallmentSlabs = [
   InstallmentSlab(
     id: '1',
@@ -59,7 +58,6 @@ class SamobayApp extends StatelessWidget {
   }
 }
 
-// ব্যবসায়িক বিনিয়োগ/আয়ের মডেল
 class BusinessRecord {
   final String id;
   final String title;
@@ -76,7 +74,6 @@ class BusinessRecord {
   });
 }
 
-// লেনদেনের হিস্ট্রি মডেল
 class TransactionHistory {
   final DateTime date;
   final double amount;
@@ -93,7 +90,6 @@ class TransactionHistory {
   });
 }
 
-// সদস্য মডেল ক্লাস
 class Member {
   String id;
   String name;
@@ -122,10 +118,6 @@ class Member {
     return depositTxs.isNotEmpty ? depositTxs.last.amount : 0.0;
   }
 
-  double get previousDepositAmount {
-    return deposit - lastDepositAmount;
-  }
-
   double get expectedTotalTarget {
     DateTime now = DateTime.now();
     double totalExpected = 0.0;
@@ -146,9 +138,7 @@ class Member {
   }
 
   double get netDifference => expectedTotalTarget - deposit;
-
   double get dueAmount => netDifference > 0 ? netDifference : 0.0;
-
   double get advanceAmount => netDifference < 0 ? netDifference.abs() : 0.0;
 
   int get dueMonthsCount {
@@ -177,6 +167,40 @@ class SamobayFinance {
   static double get netProfit {
     double profit = (totalBusinessIncome - totalBusinessExpense) - totalProfitDistributed;
     return profit > 0 ? profit : 0.0;
+  }
+}
+
+// ফোনে ডাউনলোড ফোল্ডারে ফাইল সেভ করার ফাংশন
+Future<void> saveReportToFile(BuildContext context, String fileName, String content) async {
+  try {
+    Directory? directory;
+    if (Platform.isAndroid) {
+      directory = Directory('/storage/emulated/0/Download');
+      if (!await directory.exists()) {
+        directory = await getExternalStorageDirectory();
+      }
+    } else {
+      directory = await getApplicationDocumentsDirectory();
+    }
+
+    final File file = File('${directory?.path}/$fileName');
+    await file.writeAsString(content);
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("ফাইল ডাউনলোডে সেভ হয়েছে:\n${file.path}")),
+      );
+    }
+  } catch (e) {
+    final directory = await getApplicationDocumentsDirectory();
+    final File file = File('${directory.path}/$fileName');
+    await file.writeAsString(content);
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("ফাইল সেভ হয়েছে: ${file.path}")),
+      );
+    }
   }
 }
 
@@ -874,14 +898,19 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               ),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                onPressed: () {
+                onPressed: () async {
                   Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("ব্যবসার সম্পূর্ণ লাভ-ক্ষতির খতিয়ান ডাউনলোড হয়েছে!")),
-                  );
+                  String reportContent = "=== [$globalSocietyName] ব্যবসার লাভ-ক্ষতি খতিয়ান ===\n\n";
+                  reportContent += "মোট ব্যবসায়িক মুনাফা: ৳${SamobayFinance.totalBusinessIncome}\n";
+                  reportContent += "মোট প্রজেক্ট খরচ: ৳${SamobayFinance.totalBusinessExpense}\n";
+                  reportContent += "অবশিষ্ট নিট লাভ: ৳${SamobayFinance.netProfit}\n\n বিস্তারিত এন্ট্রি:\n";
+                  for (var r in globalBusinessRecords) {
+                    reportContent += "- ${r.title}: ${r.isIncome ? '+' : '-'}৳${r.amount} (${r.date.day}/${r.date.month}/${r.date.year})\n";
+                  }
+                  await saveReportToFile(context, "Business_Ledger_${DateTime.now().millisecondsSinceEpoch}.txt", reportContent);
                 },
                 icon: const Icon(Icons.download, size: 16),
-                label: const Text("ডাউনলোড/প্রিন্ট"),
+                label: const Text("ডাউনলোড/সেভ"),
               ),
             ],
           );
@@ -1228,16 +1257,84 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বন্ধ করুন")),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text("${member.name}-এর বিস্তারিত স্টেটমেন্ট ডাউনলোড সফল হয়েছে!")),
-              );
+              String statementText = "=== [$globalSocietyName] সদস্য স্টেটমেন্ট ===\n\n";
+              statementText += "সদস্যের নাম: ${member.name}\nID: ${member.id} | মোবাইল: ${member.mobile}\n";
+              statementText += "মূল জমা: ৳${member.deposit}\nঅর্জিত লাভ: ৳${member.profitEarned}\nসর্বমোট ব্যালেন্স: ৳${member.totalBalance}\n";
+              statementText += "বকেয়া/অগ্রিম: ${member.dueAmount > 0 ? 'বকেয়া ৳${member.dueAmount}' : 'অগ্রিম ৳${member.advanceAmount}'}\n\nলেনদেনের ইতিহাস:\n";
+              for (var t in member.transactions) {
+                statementText += "- ${t.date.day}/${t.date.month}/${t.date.year}: ৳${t.amount} (${t.paymentMethod})\n";
+              }
+              await saveReportToFile(context, "Member_${member.name}_Statement.txt", statementText);
             },
             icon: const Icon(Icons.download, size: 16),
-            label: const Text("PDF ডাউনলোড"),
+            label: const Text("ফাইল ডাউনলোড (TXT)"),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showMemberActionMenu(Member member) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              "${member.name} (ID: ${member.id})",
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green),
+            ),
+            const Text("কার্যক্রম নির্বাচন করুন", style: TextStyle(fontSize: 12, color: Colors.grey)),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.add_circle, color: Colors.green),
+              title: const Text("নতুন কিস্তি জমা দিন (+)"),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showAddInstallmentDialog(member);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.edit, color: Colors.teal),
+              title: const Text("সদস্যের তথ্য এডিট করুন"),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showEditMemberDialog(member);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.vpn_key, color: Colors.orange),
+              title: const Text("পিন রিসেট করুন"),
+              onTap: () {
+                Navigator.pop(ctx);
+                _resetPinDialog(member);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.message, color: Colors.blue),
+              title: const Text("সরাসরি SMS পাঠান"),
+              onTap: () {
+                Navigator.pop(ctx);
+                _sendSmsDialog(member);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.receipt_long, color: Colors.indigo),
+              title: const Text("হিসাব ও স্টেটমেন্ট দেখুন/ডাউনলোড"),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showMemberStatementDialog(member);
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1294,11 +1391,15 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বন্ধ করুন")),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("সকল সদস্যের সমন্বিত স্টেটমেন্ট ডাউনলোড সফল হয়েছে!")),
-              );
+              String allReport = "=== [$globalSocietyName] সকল সদস্যের সমন্বিত স্টেটমেন্ট ===\n\n";
+              for (var m in globalMembers) {
+                allReport += "ID: ${m.id} | নাম: ${m.name} | মোবাইল: ${m.mobile}\n";
+                allReport += "মূল জমা: ৳${m.deposit} | লাভ: ৳${m.profitEarned} | ব্যালেন্স: ৳${m.totalBalance}\n";
+                allReport += "বকেয়া/অগ্রিম: ${m.dueAmount > 0 ? 'Due ৳${m.dueAmount}' : 'Adv ৳${m.advanceAmount}'}\n------------------------------------------\n";
+              }
+              await saveReportToFile(context, "All_Members_Report.txt", allReport);
             },
             icon: const Icon(Icons.download, size: 16),
             label: const Text("সকলের স্টেটমেন্ট ডাউনলোড"),
@@ -1382,12 +1483,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
-            tooltip: "সমিতির সেটিংস (কিস্তির স্লাব ও অ্যাডমিন তথ্য)",
+            tooltip: "সমিতির সেটিংস",
             onPressed: _showSocietySettingsDialog,
           ),
           IconButton(
             icon: const Icon(Icons.add_business),
-            tooltip: "ব্যবসার লাভ/খরচ পোস্টিং দিন",
+            tooltip: "ব্যবসার লাভ/খরচ পোস্টিং",
             onPressed: _showAddBusinessPostingDialog,
           ),
           IconButton(
@@ -1479,7 +1580,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text("সকল সদস্যের তালিকা:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                child: Text("সকল সদস্যের তালিকা (অপশন পেতে ক্লিক করুন):", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ),
             ),
             globalMembers.isEmpty
@@ -1500,90 +1601,57 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                           : (member.advanceAmount > 0 ? "Adv: ${member.advanceAmount.toStringAsFixed(0)}৳" : "Due: ৳০");
 
                       return Card(
-                        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                backgroundColor: Colors.green,
-                                radius: 16,
-                                child: Text(member.id, style: const TextStyle(color: Colors.white, fontSize: 11)),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        child: InkWell(
+                          onTap: () => _showMemberActionMenu(member),
+                          borderRadius: BorderRadius.circular(10),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    CircleAvatar(
+                                      backgroundColor: Colors.green,
+                                      radius: 14,
+                                      child: Text(member.id, style: const TextStyle(color: Colors.white, fontSize: 11)),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        member.name,
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const Icon(Icons.touch_app, size: 18, color: Colors.grey),
+                                  ],
+                                ),
+                                const Divider(height: 12),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
                                     Text(
-                                      member.name,
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                      overflow: TextOverflow.ellipsis,
+                                      "ব্যালেন্স: ${member.totalBalance.toStringAsFixed(0)}৳",
+                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.green),
                                     ),
-                                    const SizedBox(height: 2),
-                                    SingleChildScrollView(
-                                      scrollDirection: Axis.horizontal,
-                                      child: Row(
-                                        children: [
-                                          Text("${member.totalBalance.toStringAsFixed(0)}৳", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green)),
-                                          const Text(" — ", style: TextStyle(color: Colors.grey, fontSize: 11)),
-                                          Text(
-                                            dueAdvText,
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.bold,
-                                              color: member.dueAmount > 0 ? Colors.red : Colors.teal,
-                                            ),
-                                          ),
-                                          const Text(" — ", style: TextStyle(color: Colors.grey, fontSize: 11)),
-                                          Text("লাভ:${member.profitEarned.toStringAsFixed(0)}৳", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue)),
-                                        ],
+                                    Text(
+                                      dueAdvText,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: member.dueAmount > 0 ? Colors.red : Colors.teal,
                                       ),
+                                    ),
+                                    Text(
+                                      "লাভ: ${member.profitEarned.toStringAsFixed(0)}৳",
+                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.blue),
                                     ),
                                   ],
                                 ),
-                              ),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    constraints: const BoxConstraints(),
-                                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                                    icon: const Icon(Icons.add_circle, color: Colors.green, size: 20),
-                                    onPressed: () => _showAddInstallmentDialog(member),
-                                    tooltip: "কিস্তি জমা দিন",
-                                  ),
-                                  IconButton(
-                                    constraints: const BoxConstraints(),
-                                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                                    icon: const Icon(Icons.edit, color: Colors.teal, size: 19),
-                                    onPressed: () => _showEditMemberDialog(member),
-                                    tooltip: "তথ্য এডিট",
-                                  ),
-                                  IconButton(
-                                    constraints: const BoxConstraints(),
-                                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                                    icon: const Icon(Icons.vpn_key, color: Colors.orange, size: 19),
-                                    onPressed: () => _resetPinDialog(member),
-                                    tooltip: "পিন রিসেট",
-                                  ),
-                                  IconButton(
-                                    constraints: const BoxConstraints(),
-                                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                                    icon: const Icon(Icons.message, color: Colors.blue, size: 19),
-                                    onPressed: () => _sendSmsDialog(member),
-                                    tooltip: "SMS পাঠান",
-                                  ),
-                                  IconButton(
-                                    constraints: const BoxConstraints(),
-                                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                                    icon: const Icon(Icons.receipt_long, color: Colors.green, size: 19),
-                                    onPressed: () => _showMemberStatementDialog(member),
-                                    tooltip: "হিসাব/স্টেটমেন্ট",
-                                  ),
-                                ],
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       );
@@ -1832,7 +1900,7 @@ class _MemberDashboardState extends State<MemberDashboard> {
         actions: [
           IconButton(
             icon: const Icon(Icons.vpn_key),
-            tooltip: "পিন পরিবর্তন করুন",
+            tooltip: "পিন পরিবর্তন",
             onPressed: _showChangePinDialog,
           ),
           IconButton(
@@ -1933,15 +2001,22 @@ class _MemberDashboardState extends State<MemberDashboard> {
                   backgroundColor: Colors.green,
                   foregroundColor: Colors.white,
                 ),
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("${widget.member.name}-এর বিস্তারিত স্টেটমেন্ট ডাউনলোড করা হয়েছে!")),
-                  );
+                onPressed: () async {
+                  String memberText = "=== [$globalSocietyName] সদস্য স্টেটমেন্ট ===\n\n";
+                  memberText += "নাম: ${widget.member.name} (ID: ${widget.member.id})\n";
+                  memberText += "মোবাইল: ${widget.member.mobile}\n";
+                  memberText += "মূল জমা: ৳${widget.member.deposit}\n";
+                  memberText += "অর্জিত লাভ: ৳${widget.member.profitEarned}\n";
+                  memberText += "সর্বমোট ব্যালেন্স: ৳${widget.member.totalBalance}\n\nলেনদেনসমূহ:\n";
+                  for (var t in widget.member.transactions) {
+                    memberText += "- ${t.date.day}/${t.date.month}/${t.date.year}: ৳${t.amount} (${t.paymentMethod})\n";
+                  }
+                  await saveReportToFile(context, "${widget.member.name}_Statement.txt", memberText);
                 },
                 icon: const Icon(Icons.download),
                 label: const Text(
-                  "বিস্তারিত স্টেটমেন্ট ডাউনলোড করুন",
-                  style: TextStyle(fontSize: 15),
+                  "বিস্তারিত স্টেটমেন্ট ডাউনলোড করুন (ফাইল সেভ)",
+                  style: TextStyle(fontSize: 14),
                 ),
               ),
             ),
