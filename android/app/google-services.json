@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "658838391632",
+    "project_id": "batch-ekta-forum-5dcc9",
+    "storage_bucket": "batch-ekta-forum-5dcc9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:658838391632:android:5adf45258ba2bfe6a1ba55",
+        "android_client_info": {
+          "package_name": "com.example.ekta_forum"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCu35nX2cxMT0zswD_QkLv6LJm_gJKuryI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
