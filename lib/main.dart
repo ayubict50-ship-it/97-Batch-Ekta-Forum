@@ -8,7 +8,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint("Firebase Init Error: $e");
+  }
   runApp(const SamobayApp());
 }
 
@@ -977,7 +981,6 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     );
   }
 
-  // লাভ-ক্ষতির খতিয়ান ভিউ (সদস্যদের তালিকার মতো পাশাপাশি কার্ড স্টাইল)
   void _showManageBusinessRecordsDialog() {
     showDialog(
       context: context,
