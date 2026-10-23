@@ -38,10 +38,10 @@ android {
         jvmTarget = '1.8'
     }
 
-    defaultConfig {
+  defaultConfig {
         applicationId "com.example.batch_ekta_forum"
-        minSdk 21
-        targetSdk 36
+        minSdkVersion 21
+        targetSdkVersion flutter.targetSdkVersion
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
         multiDexEnabled true
