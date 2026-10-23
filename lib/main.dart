@@ -7,6 +7,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 void main() async {
+  // ফায়ারবেজ ক্র্যাশ এড়াতে সেফ বাইন্ডিং ও ট্রাই-ক্যাচ নিশ্চিত করা হলো
   WidgetsFlutterBinding.ensureInitialized();
   try {
     await Firebase.initializeApp();
@@ -227,7 +228,7 @@ class Member {
 List<Member> globalMembers = [];
 List<BusinessRecord> globalBusinessRecords = [];
 
-// ক্লাউড অটো-সিঙ্ক সার্ভিস
+// ক্লাউড অটো-সিঙ্ক সার্ভিস (নিরাপদ ট্রাই-ক্যাচ সহ)
 class CloudDatabaseService {
   static final _db = FirebaseFirestore.instance;
 
@@ -254,32 +255,32 @@ class CloudDatabaseService {
 
   static Future<void> loadDataFromCloud() async {
     try {
-      var membersDoc = await _db.collection('society_data').doc('members').get();
+      var membersDoc = await _db.collection('society_data').doc('members').timeout(const Duration(seconds: 5)).get();
       if (membersDoc.exists && membersDoc.data()?['list'] != null) {
         List l = membersDoc.data()!['list'];
         globalMembers = l.map((m) => Member.fromJson(m)).toList();
       }
 
-      var bizDoc = await _db.collection('society_data').doc('business').get();
+      var bizDoc = await _db.collection('society_data').doc('business').timeout(const Duration(seconds: 5)).get();
       if (bizDoc.exists && bizDoc.data()?['list'] != null) {
         List l = bizDoc.data()!['list'];
         globalBusinessRecords = l.map((b) => BusinessRecord.fromJson(b)).toList();
       }
 
-      var slabDoc = await _db.collection('society_data').doc('slabs').get();
+      var slabDoc = await _db.collection('society_data').doc('slabs').timeout(const Duration(seconds: 5)).get();
       if (slabDoc.exists && slabDoc.data()?['list'] != null) {
         List l = slabDoc.data()!['list'];
         globalInstallmentSlabs = l.map((s) => InstallmentSlab.fromJson(s)).toList();
       }
 
-      var settingsDoc = await _db.collection('society_data').doc('settings').get();
+      var settingsDoc = await _db.collection('society_data').doc('settings').timeout(const Duration(seconds: 5)).get();
       if (settingsDoc.exists) {
         globalSocietyName = settingsDoc.data()?['societyName'] ?? globalSocietyName;
         globalAdminId = settingsDoc.data()?['adminId'] ?? globalAdminId;
         globalAdminPassword = settingsDoc.data()?['adminPassword'] ?? globalAdminPassword;
       }
     } catch (e) {
-      debugPrint("Cloud Load Error: $e");
+      debugPrint("Cloud Load Error or Timeout (Offline mode active): $e");
     }
   }
 }
@@ -351,7 +352,9 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _initApp() async {
+    // টাইমআউট হ্যান্ডেল করা হয়েছে যাতে ক্লাউড লোড স্লো হলেও অ্যাপ ক্র্যাশ না করে
     await CloudDatabaseService.loadDataFromCloud();
+    await Future.delayed(const Duration(milliseconds: 800));
     if (mounted) {
       Navigator.pushReplacement(
         context,
@@ -362,14 +365,14 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return Scaffold(
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(color: Colors.green),
-            SizedBox(height: 15),
-            Text("ক্লাউড ব্যাকআপ থেকে লোড হচ্ছে...", style: TextStyle(color: Colors.grey)),
+            const CircularProgressIndicator(color: Colors.green),
+            const SizedBox(height: 15),
+            const Text("ডাটা সিঙ্ক ও লোড হচ্ছে...", style: TextStyle(color: Colors.grey, fontSize: 15)),
           ],
         ),
       ),
