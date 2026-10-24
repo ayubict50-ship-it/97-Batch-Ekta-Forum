@@ -172,6 +172,10 @@ class Member {
     return depositTxs.isNotEmpty ? depositTxs.last.amount : 0.0;
   }
 
+  double get previousDepositAmount {
+    return deposit - lastDepositAmount;
+  }
+
   double get expectedTotalTarget {
     DateTime now = DateTime.now();
     double totalExpected = 0.0;
@@ -227,7 +231,6 @@ class Member {
 List<Member> globalMembers = [];
 List<BusinessRecord> globalBusinessRecords = [];
 
-// ক্লাউড অটো-সিঙ্ক সার্ভিস (সঠিক সিনট্যাক্স সহ)
 class CloudDatabaseService {
   static final _db = FirebaseFirestore.instance;
 
@@ -351,7 +354,10 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _initApp() async {
-    await CloudDatabaseService.loadDataFromCloud();
+    try {
+      await CloudDatabaseService.loadDataFromCloud();
+    } catch (_) {}
+
     if (mounted) {
       Navigator.pushReplacement(
         context,
