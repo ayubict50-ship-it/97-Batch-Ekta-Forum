@@ -904,10 +904,16 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       ),
                       const Text("ব্যবসার লাভ (+)"),
                       Radio<bool>(
-                        value: false,
-                        groupValue: isIncome,
-                        onChanged: (val) => setDialogState(() => isIncome = val!),
-                      ),
+  value: false,
+  groupValue: isIncome,
+  onChanged: (val) {
+    if (val != null) {
+      setDialogState(() {
+        isIncome = val;
+      });
+    }
+  },
+),
                       const Text("প্রজেক্ট খরচ (-)"),
                     ],
                   ),
