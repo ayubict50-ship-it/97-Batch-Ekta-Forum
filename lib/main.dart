@@ -9,11 +9,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  try {
-    await Firebase.initializeApp();
-  } catch (e) {
-    debugPrint("Firebase Init Error: $e");
-  }
+  await Firebase.initializeApp();
 
   runApp(const SamobayApp());
 }
