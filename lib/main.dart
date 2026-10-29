@@ -904,16 +904,10 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       ),
                       const Text("ব্যবসার লাভ (+)"),
                       Radio<bool>(
-  value: false,
-  groupValue: isIncome,
-  onChanged: (val) {
-    if (val != null) {
-      setDialogState(() {
-        isIncome = val;
-      });
-    }
-  },
-),
+                        value: false,
+                        groupValue: isIncome,
+                        onChanged: (val) => setDialogState(() => isIncome = val!),
+                      ),
                       const Text("প্রজেক্ট খরচ (-)"),
                     ],
                   ),
@@ -1990,26 +1984,14 @@ class _MemberDashboardState extends State<MemberDashboard> {
                       Radio<String>(
                         value: 'bKash',
                         groupValue: _selectedMethod,
-                        onChanged: (val) {
-                          if (val != null) {
-                            setDialogState(() {
-                              _selectedMethod = val;
-                            });
-                          }
-                        },
+                        onChanged: (val) => setDialogState(() => _selectedMethod = val!),
                       ),
                       const Text("bKash"),
                       const SizedBox(width: 15),
                       Radio<String>(
                         value: 'Bank',
                         groupValue: _selectedMethod,
-                        onChanged: (val) {
-                          if (val != null) {
-                            setDialogState(() {
-                              _selectedMethod = val;
-                            });
-                          }
-                        },
+                        onChanged: (val) => setDialogState(() => _selectedMethod = val!),
                       ),
                       const Text("সোনালী ব্যাংক"),
                     ],
