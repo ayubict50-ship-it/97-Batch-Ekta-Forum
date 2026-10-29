@@ -238,13 +238,13 @@ class CloudDatabaseService {
 
   static Future<void> syncAllDataToCloud() async {
     try {
-      List<Map<String, dynamic>> membersData = globalMembers.map((m) => m.toJson()).toList();
+      List> membersData = globalMembers.map((m) => m.toJson()).toList();
       await _db.collection('society_data').doc('members').set({'list': membersData});
 
-      List<Map<String, dynamic>> bizData = globalBusinessRecords.map((b) => b.toJson()).toList();
+      List> bizData = globalBusinessRecords.map((b) => b.toJson()).toList();
       await _db.collection('society_data').doc('business').set({'list': bizData});
 
-      List<Map<String, dynamic>> slabData = globalInstallmentSlabs.map((s) => s.toJson()).toList();
+      List> slabData = globalInstallmentSlabs.map((s) => s.toJson()).toList();
       await _db.collection('society_data').doc('slabs').set({'list': slabData});
 
       await _db.collection('society_data').doc('settings').set({
@@ -900,13 +900,25 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       Radio<bool>(
                         value: true,
                         groupValue: isIncome,
-                        onChanged: (val) => setDialogState(() => isIncome = val!),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setDialogState(() {
+                              isIncome = val;
+                            });
+                          }
+                        },
                       ),
                       const Text("ব্যবসার লাভ (+)"),
                       Radio<bool>(
                         value: false,
                         groupValue: isIncome,
-                        onChanged: (val) => setDialogState(() => isIncome = val!),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setDialogState(() {
+                              isIncome = val;
+                            });
+                          }
+                        },
                       ),
                       const Text("প্রজেক্ট খরচ (-)"),
                     ],
@@ -1984,14 +1996,26 @@ class _MemberDashboardState extends State<MemberDashboard> {
                       Radio<String>(
                         value: 'bKash',
                         groupValue: _selectedMethod,
-                        onChanged: (val) => setDialogState(() => _selectedMethod = val!),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setDialogState(() {
+                              _selectedMethod = val;
+                            });
+                          }
+                        },
                       ),
                       const Text("bKash"),
                       const SizedBox(width: 15),
                       Radio<String>(
                         value: 'Bank',
                         groupValue: _selectedMethod,
-                        onChanged: (val) => setDialogState(() => _selectedMethod = val!),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setDialogState(() {
+                              _selectedMethod = val;
+                            });
+                          }
+                        },
                       ),
                       const Text("সোনালী ব্যাংক"),
                     ],
