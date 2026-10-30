@@ -8,9 +8,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  await Firebase.initializeApp();
-
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint("Firebase Init Error: $e");
+  }
   runApp(const SamobayApp());
 }
 
@@ -170,10 +172,6 @@ class Member {
     return depositTxs.isNotEmpty ? depositTxs.last.amount : 0.0;
   }
 
-  double get previousDepositAmount {
-    return deposit - lastDepositAmount;
-  }
-
   double get expectedTotalTarget {
     DateTime now = DateTime.now();
     double totalExpected = 0.0;
@@ -229,6 +227,7 @@ class Member {
 List<Member> globalMembers = [];
 List<BusinessRecord> globalBusinessRecords = [];
 
+// ক্লাউড অটো-সিঙ্ক সার্ভিস (সঠিক সিনট্যাক্স সহ)
 class CloudDatabaseService {
   static final _db = FirebaseFirestore.instance;
 
@@ -306,32 +305,21 @@ class SamobayFinance {
 
 Future<void> saveReportToFile(BuildContext context, String fileName, String content) async {
   try {
-    Directory? directory;
-    if (Platform.isAndroid) {
-      directory = Directory('/storage/emulated/0/Download');
-      if (!await directory.exists()) {
-        directory = await getExternalStorageDirectory();
-      }
-    } else {
-      directory = await getApplicationDocumentsDirectory();
-    }
+    // অ্যান্ড্রয়েডের লেটেস্ট ভার্সনগুলোর (Android 13/14+) স্কোপড স্টোরেজ সমস্যা এড়াতে অ্যাপের সিকিউর ডিরেক্টরি ব্যবহার করা হলো।
+    Directory directory = await getApplicationDocumentsDirectory();
 
-    final File file = File('${directory?.path}/$fileName');
-    await file.writeAsString(content);
-
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("ফাইল ডাউনলোডে সেভ হয়েছে:\n${file.path}")),
-      );
-    }
-  } catch (e) {
-    final directory = await getApplicationDocumentsDirectory();
     final File file = File('${directory.path}/$fileName');
     await file.writeAsString(content);
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("ফাইল সেভ হয়েছে: ${file.path}")),
+        SnackBar(content: Text("ফাইল সফলভাবে সেভ হয়েছে:\n${file.path}")),
+      );
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("ফাইল সেভ করতে সমস্যা হয়েছে: $e")),
       );
     }
   }
@@ -352,10 +340,7 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _initApp() async {
-    try {
-      await CloudDatabaseService.loadDataFromCloud();
-    } catch (_) {}
-
+    await CloudDatabaseService.loadDataFromCloud();
     if (mounted) {
       Navigator.pushReplacement(
         context,
@@ -896,25 +881,13 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       Radio<bool>(
                         value: true,
                         groupValue: isIncome,
-                        onChanged: (val) {
-                          if (val != null) {
-                            setDialogState(() {
-                              isIncome = val;
-                            });
-                          }
-                        },
+                        onChanged: (val) => setDialogState(() => isIncome = val!),
                       ),
                       const Text("ব্যবসার লাভ (+)"),
                       Radio<bool>(
                         value: false,
                         groupValue: isIncome,
-                        onChanged: (val) {
-                          if (val != null) {
-                            setDialogState(() {
-                              isIncome = val;
-                            });
-                          }
-                        },
+                        onChanged: (val) => setDialogState(() => isIncome = val!),
                       ),
                       const Text("প্রজেক্ট খরচ (-)"),
                     ],
