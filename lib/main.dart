@@ -182,8 +182,11 @@ class Member {
 
       if (effectiveStart.isBefore(effectiveEnd) || effectiveStart.isAtSameMomentAs(effectiveEnd)) {
         int months = (effectiveEnd.year - effectiveStart.year) * 12 + (effectiveEnd.month - effectiveStart.month);
-        if (months < 0) months = 0;
-        else months += 1;
+        if (months < 0) {
+          months = 0;
+        } else {
+          months += 1;
+        }
 
         totalExpected += (months * slab.amount);
       }
