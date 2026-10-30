@@ -227,20 +227,19 @@ class Member {
 List<Member> globalMembers = [];
 List<BusinessRecord> globalBusinessRecords = [];
 
-// ক্লাউড অটো-সিঙ্ক সার্ভিস
 class CloudDatabaseService {
   static final _db = FirebaseFirestore.instance;
 
   static Future<void> syncAllDataToCloud() async {
     try {
-      List> membersData = globalMembers.map((m) => m.toJson()).toList();
-      await _db.collection('society_data').doc('members').set({'list': membersData});
+      List> membersList = globalMembers.map((m) => m.toJson()).toList();
+      await _db.collection('society_data').doc('members').set({'list': membersList});
 
-      List> bizData = globalBusinessRecords.map((b) => b.toJson()).toList();
-      await _db.collection('society_data').doc('business').set({'list': bizData});
+      List> businessList = globalBusinessRecords.map((b) => b.toJson()).toList();
+      await _db.collection('society_data').doc('business').set({'list': businessList});
 
-      List> slabData = globalInstallmentSlabs.map((s) => s.toJson()).toList();
-      await _db.collection('society_data').doc('slabs').set({'list': slabData});
+      List> slabsList = globalInstallmentSlabs.map((s) => s.toJson()).toList();
+      await _db.collection('society_data').doc('slabs').set({'list': slabsList});
 
       await _db.collection('society_data').doc('settings').set({
         'societyName': globalSocietyName,
@@ -254,32 +253,32 @@ class CloudDatabaseService {
 
   static Future<void> loadDataFromCloud() async {
     try {
-      var membersDoc = await _db.collection('society_data').doc('members').get().timeout(const Duration(seconds: 5));
+      var membersDoc = await _db.collection('society_data').doc('members').get();
       if (membersDoc.exists && membersDoc.data()?['list'] != null) {
         List l = membersDoc.data()!['list'];
-        globalMembers = l.map((m) => Member.fromJson(m as Map<String, dynamic>)).toList();
+        globalMembers = l.map((m) => Member.fromJson(m)).toList();
       }
 
-      var bizDoc = await _db.collection('society_data').doc('business').get().timeout(const Duration(seconds: 5));
+      var bizDoc = await _db.collection('society_data').doc('business').get();
       if (bizDoc.exists && bizDoc.data()?['list'] != null) {
         List l = bizDoc.data()!['list'];
-        globalBusinessRecords = l.map((b) => BusinessRecord.fromJson(b as Map<String, dynamic>)).toList();
+        globalBusinessRecords = l.map((b) => BusinessRecord.fromJson(b)).toList();
       }
 
-      var slabDoc = await _db.collection('society_data').doc('slabs').get().timeout(const Duration(seconds: 5));
+      var slabDoc = await _db.collection('society_data').doc('slabs').get();
       if (slabDoc.exists && slabDoc.data()?['list'] != null) {
         List l = slabDoc.data()!['list'];
-        globalInstallmentSlabs = l.map((s) => InstallmentSlab.fromJson(s as Map<String, dynamic>)).toList();
+        globalInstallmentSlabs = l.map((s) => InstallmentSlab.fromJson(s)).toList();
       }
 
-      var settingsDoc = await _db.collection('society_data').doc('settings').get().timeout(const Duration(seconds: 5));
-      if (settingsDoc.exists && settingsDoc.data() != null) {
+      var settingsDoc = await _db.collection('society_data').doc('settings').get();
+      if (settingsDoc.exists) {
         globalSocietyName = settingsDoc.data()?['societyName'] ?? globalSocietyName;
         globalAdminId = settingsDoc.data()?['adminId'] ?? globalAdminId;
         globalAdminPassword = settingsDoc.data()?['adminPassword'] ?? globalAdminPassword;
       }
     } catch (e) {
-      debugPrint("Cloud Load Error or Timeout: $e");
+      debugPrint("Cloud Load Error: $e");
     }
   }
 }
@@ -305,19 +304,32 @@ class SamobayFinance {
 
 Future<void> saveReportToFile(BuildContext context, String fileName, String content) async {
   try {
-    Directory directory = await getApplicationDocumentsDirectory();
+    Directory? directory;
+    if (Platform.isAndroid) {
+      directory = Directory('/storage/emulated/0/Download');
+      if (!await directory.exists()) {
+        directory = await getExternalStorageDirectory();
+      }
+    } else {
+      directory = await getApplicationDocumentsDirectory();
+    }
+
+    final File file = File('${directory?.path}/$fileName');
+    await file.writeAsString(content);
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("ফাইল ডাউনলোডে সেভ হয়েছে:\n${file.path}")),
+      );
+    }
+  } catch (e) {
+    final directory = await getApplicationDocumentsDirectory();
     final File file = File('${directory.path}/$fileName');
     await file.writeAsString(content);
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("ফাইল সফলভাবে সেভ হয়েছে:\n${file.path}")),
-      );
-    }
-  } catch (e) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("ফাইল সেভ করতে সমস্যা হয়েছে: $e")),
+        SnackBar(content: Text("ফাইল সেভ হয়েছে: ${file.path}")),
       );
     }
   }
