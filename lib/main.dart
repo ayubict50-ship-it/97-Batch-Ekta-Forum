@@ -227,7 +227,7 @@ class Member {
 List<Member> globalMembers = [];
 List<BusinessRecord> globalBusinessRecords = [];
 
-// ক্লাউড অটো-সিঙ্ক সার্ভিস (সঠিক সিনট্যাক্স সহ)
+// ক্লাউড অটো-সিঙ্ক সার্ভিস
 class CloudDatabaseService {
   static final _db = FirebaseFirestore.instance;
 
@@ -257,23 +257,23 @@ class CloudDatabaseService {
       var membersDoc = await _db.collection('society_data').doc('members').get().timeout(const Duration(seconds: 5));
       if (membersDoc.exists && membersDoc.data()?['list'] != null) {
         List l = membersDoc.data()!['list'];
-        globalMembers = l.map((m) => Member.fromJson(m)).toList();
+        globalMembers = l.map((m) => Member.fromJson(m as Map<String, dynamic>)).toList();
       }
 
       var bizDoc = await _db.collection('society_data').doc('business').get().timeout(const Duration(seconds: 5));
       if (bizDoc.exists && bizDoc.data()?['list'] != null) {
         List l = bizDoc.data()!['list'];
-        globalBusinessRecords = l.map((b) => BusinessRecord.fromJson(b)).toList();
+        globalBusinessRecords = l.map((b) => BusinessRecord.fromJson(b as Map<String, dynamic>)).toList();
       }
 
       var slabDoc = await _db.collection('society_data').doc('slabs').get().timeout(const Duration(seconds: 5));
       if (slabDoc.exists && slabDoc.data()?['list'] != null) {
         List l = slabDoc.data()!['list'];
-        globalInstallmentSlabs = l.map((s) => InstallmentSlab.fromJson(s)).toList();
+        globalInstallmentSlabs = l.map((s) => InstallmentSlab.fromJson(s as Map<String, dynamic>)).toList();
       }
 
       var settingsDoc = await _db.collection('society_data').doc('settings').get().timeout(const Duration(seconds: 5));
-      if (settingsDoc.exists) {
+      if (settingsDoc.exists && settingsDoc.data() != null) {
         globalSocietyName = settingsDoc.data()?['societyName'] ?? globalSocietyName;
         globalAdminId = settingsDoc.data()?['adminId'] ?? globalAdminId;
         globalAdminPassword = settingsDoc.data()?['adminPassword'] ?? globalAdminPassword;
@@ -305,9 +305,7 @@ class SamobayFinance {
 
 Future<void> saveReportToFile(BuildContext context, String fileName, String content) async {
   try {
-    // অ্যান্ড্রয়েডের লেটেস্ট ভার্সনগুলোর (Android 13/14+) স্কোপড স্টোরেজ সমস্যা এড়াতে অ্যাপের সিকিউর ডিরেক্টরি ব্যবহার করা হলো।
     Directory directory = await getApplicationDocumentsDirectory();
-
     final File file = File('${directory.path}/$fileName');
     await file.writeAsString(content);
 
