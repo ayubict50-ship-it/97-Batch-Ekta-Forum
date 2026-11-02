@@ -1,7 +1,7 @@
 name: Build Flutter APK
 
 permissions:
-  contents: write
+  contents: read
   actions: read
 
 on:
