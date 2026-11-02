@@ -1,18 +1,16 @@
 name: Build Flutter APK
 
-permissions:
-  contents: read
-  actions: read
-
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
 
-
 jobs:
   build:
     runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout repository
@@ -29,15 +27,10 @@ jobs:
         with:
           flutter-version: '3.19.x'
           channel: 'stable'
+          cache: true
 
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Build Release APK
+      - name: Build APK
         run: flutter build apk --release
-
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
