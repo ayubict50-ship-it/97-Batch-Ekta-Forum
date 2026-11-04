@@ -238,11 +238,12 @@ class CloudDatabaseService {
       List membersList = globalMembers.map((m) => m.toJson()).toList();
       await _db.collection('society_data').doc('members').set({'list': membersList});
 
-List businessList = globalBusinessRecords.map((b) => b.toJson()).toList();
-    await _db.collection('society_data').doc('business').set({'list': businessList});
-    
-    List slabsList = globalInstallmentSlabs.map((s) => s.toJson()).toList();
-    await _db.collection('society_data').doc('slabs').set({'list': slabsList});
+      List businessList = globalBusinessRecords.map((b) => b.toJson()).toList();
+      await _db.collection('society_data').doc('business').set({'list': businessList});
+      
+      List slabsList = globalInstallmentSlabs.map((s) => s.toJson()).toList();
+      await _db.collection('society_data').doc('slabs').set({'list': slabsList});
+
       await _db.collection('society_data').doc('settings').set({
         'societyName': globalSocietyName,
         'adminId': globalAdminId,
@@ -352,7 +353,11 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _initApp() async {
-    await CloudDatabaseService.loadDataFromCloud();
+    try {
+      await CloudDatabaseService.loadDataFromCloud().timeout(const Duration(seconds: 8));
+    } catch (e) {
+      debugPrint("Startup Load Error: $e");
+    }
     if (mounted) {
       Navigator.pushReplacement(
         context,
