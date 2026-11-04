@@ -2,7 +2,8 @@ workflows:
   android-workflow:
     name: Android Workflow
     environment:
-      flutter: stable
+      flutter: 3.22.2
+      java: 17
       xcode: latest
     scripts:
       - name: Get Flutter packages
