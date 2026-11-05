@@ -23,23 +23,25 @@ jobs:
               echo "Overwriting $WRAPPER_FILE with Gradle 8.6"
               echo "distributionBase=GRADLE_USER_HOME" > "$WRAPPER_FILE"
               echo "distributionPath=wrapper/dists" >> "$WRAPPER_FILE"
-              echo "distributionUrl=https\://services.gradle.org/distributions/gradle-8.6-bin.zip" >> "$WRAPPER_FILE"
+              echo "distributionUrl=https\://services.gradle.org/distributions/gradle-8.6-all.zip" >> "$WRAPPER_FILE"
+              echo "networkTimeout=10000000" >> "$WRAPPER_FILE"
+              echo "validateDistributionUrl=true" >> "$WRAPPER_FILE"
               echo "zipStoreBase=GRADLE_USER_HOME" >> "$WRAPPER_FILE"
               echo "zipStorePath=wrapper/dists" >> "$WRAPPER_FILE"
+            else
+              echo "Warning: $WRAPPER_FILE not found!"
             fi
       - run:
-          name: Get Dependencies
+          name: Install Dependencies
           command: |
-            export PATH="$PATH:$HOME/flutter/bin"
             flutter pub get
       - run:
-          name: Build Release APK
+          name: Build APK
           command: |
-            export PATH="$PATH:$HOME/flutter/bin"
             flutter build apk --release --no-tree-shake-icons
       - store_artifacts:
-          path: build/app/outputs/flutter-apk/app-release.apk
-          destination: app-release.apk
+            path: build/app/outputs/flutter-apk/app-release.apk
+            destination: app-release.apk
 
 workflows:
   build-workflow:
