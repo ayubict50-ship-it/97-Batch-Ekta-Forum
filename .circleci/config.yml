@@ -9,7 +9,7 @@ jobs:
       - run:
           name: Install Specific Flutter Version
           command: |
-            git clone https://github.com/flutter/flutter.git -b 3.19.6 --depth 1 ~/flutter
+            git clone https://github.com/flutter/flutter.git -b 3.24.0 --depth 1 ~/flutter
             echo 'export PATH="$PATH:$HOME/flutter/bin"' >> $BASH_ENV
             source $BASH_ENV
             flutter --version
