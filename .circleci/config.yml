@@ -3,18 +3,26 @@ version: 2.1
 jobs:
   build-apk:
     docker:
-      - image: cimg/android:2024.04-flutter
+      - image: cimg/android:2023.08-node
     steps:
       - checkout
       - run:
-          name: Check Flutter Version
-          command: flutter --version
+          name: Install Flutter
+          command: |
+            git clone https://github.com/flutter/flutter.git -b stable --depth 1 ~/flutter
+            echo 'export PATH="$PATH:$HOME/flutter/bin"' >> $BASH_ENV
+            source $BASH_ENV
+            flutter --version
       - run:
           name: Get Dependencies
-          command: flutter pub get
+          command: |
+            export PATH="$PATH:$HOME/flutter/bin"
+            flutter pub get
       - run:
           name: Build Release APK
-          command: flutter build apk --release --no-tree-shake-icons
+          command: |
+            export PATH="$PATH:$HOME/flutter/bin"
+            flutter build apk --release --no-tree-shake-icons
       - store_artifacts:
           path: build/app/outputs/flutter-apk/app-release.apk
           destination: app-release.apk
