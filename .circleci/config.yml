@@ -1,0 +1,25 @@
+version: 2.1
+
+jobs:
+  build-apk:
+    docker:
+      - image: cimg/android:2024.04-flutter
+    steps:
+      - checkout
+      - run:
+          name: Check Flutter Version
+          command: flutter --version
+      - run:
+          name: Get Dependencies
+          command: flutter pub get
+      - run:
+          name: Build Release APK
+          command: flutter build apk --release --no-tree-shake-icons
+      - store_artifacts:
+          path: build/app/outputs/flutter-apk/app-release.apk
+          destination: app-release.apk
+
+workflows:
+  build-workflow:
+    jobs:
+      - build-apk
