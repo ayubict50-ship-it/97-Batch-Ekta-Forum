@@ -2,8 +2,8 @@ version: 2.1
 
 executors:
   flutter-executor:
-    docker:
-      - image: ghcr.io/cirrusci/flutter:3.24.3
+docker:
+  - image: ghcr.io/cirrusci/flutter:3.24.3
 
 jobs:
   build-apk:
