@@ -14,15 +14,22 @@ jobs:
             source $BASH_ENV
             flutter --version
       - run:
-          name: Update Gradle Version
+          name: Force Update Gradle Version to 8.6
           command: |
-            # Update gradle-wrapper.properties to version 8.6
             WRAPPER_FILE="android/gradle/wrapper/gradle-wrapper.properties"
             if [ -f "$WRAPPER_FILE" ]; then
-              sed -i 's/gradle-8.0-all.zip/gradle-8.6-all.zip/g' $WRAPPER_FILE
-              sed -i 's/gradle-8.0-bin.zip/gradle-8.6-all.zip/g' $WRAPPER_FILE
-              sed -i 's/gradle-7.[0-9]*-all.zip/gradle-8.6-all.zip/g' $WRAPPER_FILE
+              echo "Before update:"
               cat $WRAPPER_FILE
+              # Replace any version with gradle-8.6-bin.zip or all.zip
+              echo "distributionBase=GRADLE_USER_HOME" > $WRAPPER_FILE
+              echo "distributionPath=wrapper/dists" >> $WRAPPER_FILE
+              echo "distributionUrl=https\://services.gradle.org/distributions/gradle-8.6-bin.zip" >> $WRAPPER_FILE
+              echo "zipStoreBase=GRADLE_USER_HOME" >> $WRAPPER_FILE
+              echo "zipStorePath=wrapper/dists" >> $WRAPPER_FILE
+              echo "After update:"
+              cat $WRAPPER_FILE
+            else
+              echo "Error: gradle-wrapper.properties not found!"
             fi
       - run:
           name: Get Dependencies
