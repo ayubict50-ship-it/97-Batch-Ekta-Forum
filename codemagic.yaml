@@ -4,7 +4,7 @@ workflows:
     environment:
       flutter: 3.24.3
       java: 17
-   scripts:
+    scripts:
       - name: Clean project
         script: |
           flutter clean
