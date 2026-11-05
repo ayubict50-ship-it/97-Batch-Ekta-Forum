@@ -4,13 +4,17 @@ workflows:
     environment:
       flutter: 3.24.3
       java: 17
-      xcode: latest
     scripts:
       - name: Clean project
-        script: flutter clean
-      - name: Get Flutter packages
-        script: flutter pub get
+        script: |
+          flutter clean
+          flutter pub get
+      - name: Grant gradlew execution rights
+        script: |
+          cd android
+          chmod +x gradlew
       - name: Build APK
-        script: flutter build apk --release --no-tree-shake-icons
+        script: |
+          flutter build apk --release --no-tree-shake-icons
     artifacts:
       - build/app/outputs/flutter-apk/*.apk
