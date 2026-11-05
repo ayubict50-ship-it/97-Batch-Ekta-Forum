@@ -1,20 +1,14 @@
 workflows:
-  android-workflow:
+_  android-workflow:
     name: Android Workflow
     environment:
       flutter: 3.24.3
       java: 17
     scripts:
-      - name: Clean project
+      - name: Clean and Get packages
         script: |
           flutter clean
           flutter pub get
-      - name: Grant gradlew execution rights and update gradle
-        script: |
-          cd android
-          chmod +x gradlew
-          ./gradlew wrapper --gradle-version 8.7
-          ./gradlew clean
       - name: Build APK
         script: |
           flutter build apk --release --no-tree-shake-icons
