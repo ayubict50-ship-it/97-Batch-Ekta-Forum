@@ -16,8 +16,10 @@ jobs:
       - run:
           name: Purge Cache and Force Gradle 8.6 Setup
           command: |
+            # পুরনো গ্রেডল ক্যাশ ফ্লাশ/মুছে ফেলার কমান্ড
             rm -rf ~/.gradle/wrapper/dists/*
             
+            # gradle-wrapper.properties ফাইল জোরপূর্বক Gradle 8.6 এ ওভাররাইট করার অংশ
             WRAPPER_FILE="android/gradle/wrapper/gradle-wrapper.properties"
             if [ -f "$WRAPPER_FILE" ]; then
               echo "Overwriting $WRAPPER_FILE with Gradle 8.6"
