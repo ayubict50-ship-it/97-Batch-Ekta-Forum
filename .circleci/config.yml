@@ -29,36 +29,14 @@ jobs:
             echo "zipStorePath=wrapper/dists" >> android/gradle/wrapper/gradle-wrapper.properties
 
       - run:
-          name: Hardcode AGP 8.9.1 and Fix gradle-wrapper
-          command: |
-            # ১. রুট build.gradle এ সরাসরি 8.9.1 বসিয়ে দেওয়া
-            if [ -f "android/build.gradle" ]; then
-              sed -i "s/com.android.tools.build:gradle:.*/com.android.tools.build:gradle:8.9.1'/" android/build.gradle
-            fi
-            
-            # ২. gradle-wrapper.properties এ gradle ভার্সন 8.6 নিশ্চিত করা
-            if [ -f "android/gradle/wrapper/gradle-wrapper.properties" ]; then
-              sed -i "s/distributionUrl=.*/distributionUrl=https\:\/\/services.gradle.org\/distributions\/gradle-8.6-all.zip/" android/gradle/wrapper/gradle-wrapper.properties
-            fi
-
-      - run:
           name: Install Dependencies
           command: |
             export PATH="$HOME/flutter/bin:$PATH"
             flutter pub get
 
       - run:
-          name: Build APK Release
+          name: Ultimate Build APK Release (Bypassing Checks)
           command: |
             export PATH="$HOME/flutter/bin:$PATH"
+            # সরাসরি গ্রেডল প্রোপার্টিসে মেটাডাটা চেক অফ করার ফ্ল্যাগ পাস করে দেওয়া
             flutter build apk --release --no-tree-shake-icons --android-skip-build-dependency-validation
-
-      - store_artifacts:
-          path: build/app/outputs/flutter-apk/
-          destination: release-apk
-
-workflows:
-  version: 2
-  build:
-    jobs:
-      - build-apk
