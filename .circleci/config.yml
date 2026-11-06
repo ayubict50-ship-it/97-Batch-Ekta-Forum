@@ -10,9 +10,7 @@ jobs:
       - run:
           name: Force Clean All Gradle Cache
           command: |
-            # সকল সম্ভাব্য ক্যাশ ডিরেক্টরি চিরতরে ফ্লাশ করা
             rm -rf ~/.gradle/wrapper/dists/*
-            rm -rf /root/.gradle/wrapper/dists/*
             rm -rf android/.gradle
             rm -rf android/app/build
             rm -rf build
