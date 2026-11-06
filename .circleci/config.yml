@@ -28,12 +28,29 @@ jobs:
             echo "zipStorePath=wrapper/dists" >> android/gradle/wrapper/gradle-wrapper.properties
 
       - run:
-          name: Update Gradle Plugin Version Safely
+          name: Update Gradle Plugin, compileSdk, and NDK Version
           command: |
+            # ১. রুট android/build.gradle এ AGP ভার্সন 8.5.0 করা
             ROOT_BUILD_GRADLE="android/build.gradle"
             if [ -f "$ROOT_BUILD_GRADLE" ]; then
               echo "Updating AGP version in $ROOT_BUILD_GRADLE to 8.5.0"
               sed -i "s/com.android.tools.build:gradle:.*/com.android.tools.build:gradle:8.5.0'/" "$ROOT_BUILD_GRADLE"
+            fi
+
+            # ২. android/app/build.gradle এ compileSdk=36 এবং ndkVersion যোগ করা
+            APP_BUILD_GRADLE="android/app/build.gradle"
+            if [ -f "$APP_BUILD_GRADLE" ]; then
+              echo "Updating compileSdk and ndkVersion in $APP_BUILD_GRADLE"
+              if grep -q "compileSdk" "$APP_BUILD_GRADLE"; then
+                sed -i 's/compileSdk.*/compileSdk = 36/' "$APP_BUILD_GRADLE"
+              else
+                sed -i '/android {/a \    compileSdk = 36' "$APP_BUILD_GRADLE"
+              fi
+              if grep -q "ndkVersion" "$APP_BUILD_GRADLE"; then
+                sed -i 's/ndkVersion.*/ndkVersion = "28.2.13676358"/' "$APP_BUILD_GRADLE"
+              else
+                sed -i '/android {/a \    ndkVersion = "28.2.13676358"' "$APP_BUILD_GRADLE"
+              fi
             fi
 
       - run:
