@@ -28,6 +28,15 @@ jobs:
             echo "zipStorePath=wrapper/dists" >> android/gradle/wrapper/gradle-wrapper.properties
 
       - run:
+          name: Update Gradle Plugin Version Safely
+          command: |
+            ROOT_BUILD_GRADLE="android/build.gradle"
+            if [ -f "$ROOT_BUILD_GRADLE" ]; then
+              echo "Updating AGP version in $ROOT_BUILD_GRADLE to 8.5.0"
+              sed -i "s/com.android.tools.build:gradle:.*/com.android.tools.build:gradle:8.5.0'/" "$ROOT_BUILD_GRADLE"
+            fi
+
+      - run:
           name: Install Dependencies
           command: |
             export PATH="$HOME/flutter/bin:$PATH"
