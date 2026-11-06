@@ -43,9 +43,9 @@ jobs:
             flutter pub get
 
       - run:
-          name: Build APK
+          name: Build APK Without Target Flag
           command: |
-            flutter build apk --release --no-tree-shake-icons --target-platform android-arm,android-arm64
+            flutter build apk --release --no-tree-shake-icons
 
       - store_artifacts:
           path: build/app/outputs/flutter-apk/
