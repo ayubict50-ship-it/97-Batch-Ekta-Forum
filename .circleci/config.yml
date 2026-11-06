@@ -28,6 +28,15 @@ jobs:
             echo "zipStorePath=wrapper/dists" >> android/gradle/wrapper/gradle-wrapper.properties
 
       - run:
+          name: Force AGP 8.9.1 in Root build.gradle
+          command: |
+            ROOT_BUILD_GRADLE="android/build.gradle"
+            if [ -f "$ROOT_BUILD_GRADLE" ]; then
+              echo "Forcing AGP version to 8.9.1 in $ROOT_BUILD_GRADLE"
+              sed -i "s/com.android.tools.build:gradle:.*/com.android.tools.build:gradle:8.9.1'/" "$ROOT_BUILD_GRADLE"
+            fi
+
+      - run:
           name: Install Dependencies
           command: |
             export PATH="$HOME/flutter/bin:$PATH"
@@ -48,3 +57,4 @@ workflows:
   build:
     jobs:
       - build-apk
+      
