@@ -24,15 +24,18 @@ jobs:
             flutter --version
 
       - run:
-          name: Force Gradle Wrapper Version
+          name: Force Gradle Wrapper Version Safely
           command: |
-            echo "distributionBase=GRADLE_USER_HOME" > android/gradle/wrapper/gradle-wrapper.properties
-            echo "distributionPath=wrapper/dists" >> android/gradle/wrapper/gradle-wrapper.properties
-            echo "distributionUrl=https\://services.gradle.org/distributions/gradle-8.6-all.zip" >> android/gradle/wrapper/gradle-wrapper.properties
-            echo "networkTimeout=10000000" >> android/gradle/wrapper/gradle-wrapper.properties
-            echo "validateDistributionUrl=true" >> android/gradle/wrapper/gradle-wrapper.properties
-            echo "zipStoreBase=GRADLE_USER_HOME" >> android/gradle/wrapper/gradle-wrapper.properties
-            echo "zipStorePath=wrapper/dists" >> android/gradle/wrapper/gradle-wrapper.properties
+            mkdir -p android/gradle/wrapper
+            WRAPPER_FILE="android/gradle/wrapper/gradle-wrapper.properties"
+            echo "Overwriting $WRAPPER_FILE with Gradle 8.6"
+            echo "distributionBase=GRADLE_USER_HOME" > "$WRAPPER_FILE"
+            echo "distributionPath=wrapper/dists" >> "$WRAPPER_FILE"
+            echo "distributionUrl=https\://services.gradle.org/distributions/gradle-8.6-all.zip" >> "$WRAPPER_FILE"
+            echo "networkTimeout=10000000" >> "$WRAPPER_FILE"
+            echo "validateDistributionUrl=true" >> "$WRAPPER_FILE"
+            echo "zipStoreBase=GRADLE_USER_HOME" >> "$WRAPPER_FILE"
+            echo "zipStorePath=wrapper/dists" >> "$WRAPPER_FILE"
 
       - run:
           name: Install Dependencies
