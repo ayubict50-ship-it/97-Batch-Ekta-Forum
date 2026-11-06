@@ -6,6 +6,17 @@ jobs:
       - image: cimg/android:2023.08-node
     steps:
       - checkout
+
+      - run:
+          name: Force Clean All Gradle Cache
+          command: |
+            # সকল সম্ভাব্য ক্যাশ ডিরেক্টরি চিরতরে ফ্লাশ করা
+            rm -rf ~/.gradle/wrapper/dists/*
+            rm -rf /root/.gradle/wrapper/dists/*
+            rm -rf android/.gradle
+            rm -rf android/app/build
+            rm -rf build
+
       - run:
           name: Install Specific Flutter Version
           command: |
@@ -13,13 +24,10 @@ jobs:
             echo 'export PATH="$PATH:$HOME/flutter/bin"' >> $BASH_ENV
             source $BASH_ENV
             flutter --version
+
       - run:
-          name: Purge Cache and Force Gradle 8.6 Setup
+          name: Force Gradle 8.6 Setup
           command: |
-            # পুরনো গ্রেডল ক্যাশ ফ্লাশ/মুছে ফেলার কমান্ড
-            rm -rf ~/.gradle/wrapper/dists/*
-            
-            # gradle-wrapper.properties ফাইল জোরপূর্বক Gradle 8.6 এ ওভাররাইট করার অংশ
             WRAPPER_FILE="android/gradle/wrapper/gradle-wrapper.properties"
             if [ -f "$WRAPPER_FILE" ]; then
               echo "Overwriting $WRAPPER_FILE with Gradle 8.6"
@@ -33,17 +41,20 @@ jobs:
             else
               echo "Warning: $WRAPPER_FILE not found!"
             fi
+
       - run:
           name: Install Dependencies
           command: |
             flutter pub get
+
       - run:
           name: Build APK
           command: |
             flutter build apk --release --no-tree-shake-icons
+
       - store_artifacts:
-            path: build/app/outputs/flutter-apk/app-release.apk
-            destination: app-release.apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          destination: app-release.apk
 
 workflows:
   build-workflow:
