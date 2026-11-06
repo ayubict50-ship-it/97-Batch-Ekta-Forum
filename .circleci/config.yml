@@ -17,9 +17,10 @@ jobs:
             flutter doctor
 
       - run:
-          name: Clear Gradle Cache & Force Version 8.6
+          name: Clear Gradle Cache Completely
           command: |
             rm -rf ~/.gradle/caches/
+            rm -rf ~/.android/cache/
             mkdir -p android/gradle/wrapper
             echo "distributionBase=GRADLE_USER_HOME" > android/gradle/wrapper/gradle-wrapper.properties
             echo "distributionPath=wrapper/dists" >> android/gradle/wrapper/gradle-wrapper.properties
@@ -28,12 +29,16 @@ jobs:
             echo "zipStorePath=wrapper/dists" >> android/gradle/wrapper/gradle-wrapper.properties
 
       - run:
-          name: Force AGP 8.9.1 in Root build.gradle
+          name: Hardcode AGP 8.9.1 and Fix gradle-wrapper
           command: |
-            ROOT_BUILD_GRADLE="android/build.gradle"
-            if [ -f "$ROOT_BUILD_GRADLE" ]; then
-              echo "Forcing AGP version to 8.9.1 in $ROOT_BUILD_GRADLE"
-              sed -i "s/com.android.tools.build:gradle:.*/com.android.tools.build:gradle:8.9.1'/" "$ROOT_BUILD_GRADLE"
+            # ১. রুট build.gradle এ সরাসরি 8.9.1 বসিয়ে দেওয়া
+            if [ -f "android/build.gradle" ]; then
+              sed -i "s/com.android.tools.build:gradle:.*/com.android.tools.build:gradle:8.9.1'/" android/build.gradle
+            fi
+            
+            # ২. gradle-wrapper.properties এ gradle ভার্সন 8.6 নিশ্চিত করা
+            if [ -f "android/gradle/wrapper/gradle-wrapper.properties" ]; then
+              sed -i "s/distributionUrl=.*/distributionUrl=https\:\/\/services.gradle.org\/distributions\/gradle-8.6-all.zip/" android/gradle/wrapper/gradle-wrapper.properties
             fi
 
       - run:
@@ -43,7 +48,7 @@ jobs:
             flutter pub get
 
       - run:
-          name: Build APK Without Target Flag
+          name: Build APK Release
           command: |
             export PATH="$HOME/flutter/bin:$PATH"
             flutter build apk --release --no-tree-shake-icons --android-skip-build-dependency-validation
