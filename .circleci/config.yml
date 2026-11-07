@@ -17,14 +17,14 @@ jobs:
             flutter doctor
 
       - run:
-          name: Clear Gradle Cache Completely
+          name: Clear Gradle Cache Completely and Upgrade Gradle to 8.11.1
           command: |
             rm -rf ~/.gradle/caches/
             rm -rf ~/.android/cache/
             mkdir -p android/gradle/wrapper
             echo "distributionBase=GRADLE_USER_HOME" > android/gradle/wrapper/gradle-wrapper.properties
             echo "distributionPath=wrapper/dists" >> android/gradle/wrapper/gradle-wrapper.properties
-            echo "distributionUrl=https\://services.gradle.org/distributions/gradle-8.6-all.zip" >> android/gradle/wrapper/gradle-wrapper.properties
+            echo "distributionUrl=https\://services.gradle.org/distributions/gradle-8.11.1-all.zip" >> android/gradle/wrapper/gradle-wrapper.properties
             echo "zipStoreBase=GRADLE_USER_HOME" >> android/gradle/wrapper/gradle-wrapper.properties
             echo "zipStorePath=wrapper/dists" >> android/gradle/wrapper/gradle-wrapper.properties
 
@@ -37,7 +37,6 @@ jobs:
 
             target_version = "8.9.1"
             
-            # প্রজেক্টের সব build.gradle এবং gradle files খুঁজে বের করে AGP আপডেট করা
             for root, dirs, files in os.walk("."):
                 if ".git" in root or "flutter" in root:
                     continue
@@ -49,12 +48,10 @@ jobs:
                                 content = f.read()
                             
                             updated = False
-                            # com.android.tools.build:gradle fix
                             if "com.android.tools.build:gradle" in content:
                                 content = re.sub(r"com\.android\.tools\.build:gradle:[^'\''\" ]+", f"com.android.tools.build:gradle:{target_version}", content)
                                 updated = True
                                 
-                            # 8.4.0 string replacement globally in gradle files
                             if "8.4.0" in content:
                                 content = content.replace("8.4.0", target_version)
                                 updated = True
@@ -62,7 +59,6 @@ jobs:
                             if updated:
                                 with open(file_path, "w", encoding="utf-8") as f:
                                     f.write(content)
-                                print(f"Updated AGP in: {file_path}")
                         except Exception as e:
                             pass
             '
