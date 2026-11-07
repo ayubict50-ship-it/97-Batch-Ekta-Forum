@@ -31,13 +31,10 @@ jobs:
       - run:
           name: Force Override AGP to 8.9.1 in Project Files
           command: |
-            # রুট build.gradle ফাইলে যদি 8.4.0 বা অন্য কিছু থাকে, তাকে জোরপূর্বক 8.9.1 করে দেওয়া
             if [ -f "android/build.gradle" ]; then
-              sed -i 's/com.android.tools.build:gradle:.*/com.android.tools.build:gradle:8.9.1\'/g' android/build.gradle
+              sed -i 's/com.android.tools.build:gradle:8.4.0/com.android.tools.build:gradle:8.9.1/g' android/build.gradle
+              sed -i 's/com.android.tools.build:gradle:.*/com.android.tools.build:gradle:8.9.1/g' android/build.gradle
             fi
-            
-            # প্রজেক্টের অন্যান্য জায়গায় বা gradle-wrapper এ ভার্সন কনফ্লিক্ট এড়ানোর জন্য সার্চ করে ফিক্স করা
-            find . -name "build.gradle" -type f -exec sed -i 's/8.4.0/8.9.1/g' {} +
 
       - run:
           name: Install Dependencies
