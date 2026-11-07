@@ -79,7 +79,7 @@ jobs:
           name: Build APK Release
           command: |
             export PATH="$HOME/flutter/bin:$PATH"
-            flutter build apk --release --no-tree-shake-icons --android-skip-build-dependency-validation
+            flutter build apk --release --no-tree-shake-icons --no-split-per-abi --android-skip-build-dependency-validation
 
       - store_artifacts:
           path: build/app/outputs/flutter-apk/
