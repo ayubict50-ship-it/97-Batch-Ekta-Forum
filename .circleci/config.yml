@@ -29,13 +29,21 @@ jobs:
             echo "zipStorePath=wrapper/dists" >> android/gradle/wrapper/gradle-wrapper.properties
 
       - run:
-          name: Fix android/build.gradle cleanly
+          name: Force Write Correct AGP 8.9.1
           command: |
-            # sed এর ঝামেলা বাদ দিয়ে সরাসরি পাইথন বা সাধারণ ইকো দিয়ে build.gradle ফাইলকে ঠিক করা
-            # অথবা এসইডি দিয়ে নিরাপদে রিপ্লেস করা:
-            if [ -f "android/build.gradle" ]; then
-              sed -i "s/com\.android\.tools\.build:gradle:.*/com.android.tools.build:gradle:8.9.1'/g" android/build.gradle
-            fi
+            python3 -c '
+            file_path = "android/build.gradle"
+            with open(file_path, "r") as f:
+                content = f.read()
+            
+            if "com.android.tools.build:gradle" in content:
+                import re
+                content = re.sub(r"com\.android\.tools\.build:gradle:[^'\''\"]+", "com.android.tools.build:gradle:8.9.1", content)
+            
+            with open(file_path, "w") as f:
+                f.write(content)
+            print("Successfully updated android/build.gradle to AGP 8.9.1")
+            '
 
       - run:
           name: Install Dependencies
