@@ -1,5 +1,5 @@
 workflows:
- android-workflow:
+  android-workflow:
     name: Android Workflow
     environment:
       flutter: 3.24.3
@@ -9,8 +9,8 @@ workflows:
         script: |
           flutter clean
           flutter pub get
-  - name: Build APK
-  script: |
-    flutter build apk --release --split-per-abi
-artifacts:
-  - build/app/outputs/apk/release/*.apk
+      - name: Build APK
+        script: |
+          flutter build apk --release --split-per-abi
+    artifacts:
+      - build/app/outputs/apk/release/*.apk
