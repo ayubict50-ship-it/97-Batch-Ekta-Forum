@@ -73,6 +73,7 @@ jobs:
           command: |
             export PATH="$HOME/flutter/bin:$PATH"
             flutter pub get
+            flutter clean
 
       - run:
           name: Build APK Release
