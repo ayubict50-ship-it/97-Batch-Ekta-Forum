@@ -29,11 +29,12 @@ jobs:
             echo "zipStorePath=wrapper/dists" >> android/gradle/wrapper/gradle-wrapper.properties
 
       - run:
-          name: Force Override AGP to 8.9.1 in Project Files
+          name: Fix android/build.gradle cleanly
           command: |
+            # sed এর ঝামেলা বাদ দিয়ে সরাসরি পাইথন বা সাধারণ ইকো দিয়ে build.gradle ফাইলকে ঠিক করা
+            # অথবা এসইডি দিয়ে নিরাপদে রিপ্লেস করা:
             if [ -f "android/build.gradle" ]; then
-              sed -i 's/com.android.tools.build:gradle:8.4.0/com.android.tools.build:gradle:8.9.1/g' android/build.gradle
-              sed -i 's/com.android.tools.build:gradle:.*/com.android.tools.build:gradle:8.9.1/g' android/build.gradle
+              sed -i "s/com\.android\.tools\.build:gradle:.*/com.android.tools.build:gradle:8.9.1'/g" android/build.gradle
             fi
 
       - run:
