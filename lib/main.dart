@@ -5,14 +5,25 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter/foundation.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
   try {
     await Firebase.initializeApp();
+    
+    FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+
+    PlatformDispatcher.instance.onError = (error, stack) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      return true;
+    };
   } catch (e) {
     debugPrint("Firebase Init Error: $e");
   }
+  
   runApp(const SamobayApp());
 }
 
@@ -322,7 +333,7 @@ Future<void> saveReportToFile(BuildContext context, String fileName, String cont
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("ফাইল ডাউনলোডে সেভ হয়েছে:\n${file.path}")),
+        SnackBar(content: Text("फাইল ডাউনলোডে সেভ হয়েছে:\n${file.path}")),
       );
     }
   } catch (e) {
@@ -2090,166 +2101,3 @@ class _MemberDashboardState extends State<MemberDashboard> {
                   if (amount != null && amount > 0 && _trxController.text.isNotEmpty) {
                     setState(() {
                       widget.member.deposit += amount;
-                      widget.member.transactions.add(
-                        TransactionHistory(
-                          date: DateTime.now(),
-                          amount: amount,
-                          paymentMethod: _selectedMethod == 'bKash' ? 'bKash Send Money' : 'সোনালী ব্যাংক',
-                          trxId: _trxController.text.trim(),
-                        ),
-                      );
-                    });
-                    await CloudDatabaseService.syncAllDataToCloud();
-                    if (mounted) {
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text("৳$amount টাকা সঞ্চয় জমা হিসেবে রেকর্ড ও ক্লাউডে সেভ হয়েছে!")),
-                      );
-                    }
-                  }
-                },
-                child: const Text("জমা কনফার্ম করুন"),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(globalSocietyName),
-        backgroundColor: Colors.green,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.vpn_key),
-            tooltip: "পিন পরিবর্তন",
-            onPressed: _showChangePinDialog,
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const LoginScreen()),
-              );
-            },
-          ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.green.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.green.shade200),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text("👤 ${widget.member.name}-এর খতিয়ান", style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.green)),
-                      OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
-                        onPressed: _showChangePinDialog,
-                        icon: const Icon(Icons.lock_reset, size: 16),
-                        label: const Text("পিন বদলান", style: TextStyle(fontSize: 12)),
-                      ),
-                    ],
-                  ),
-                  const Divider(),
-                  Text("• সদস্য আইডি: ${widget.member.id}", style: const TextStyle(fontSize: 15)),
-                  Text("• মূল সঞ্চয় (কিস্তি জমা): ৳${widget.member.deposit.toStringAsFixed(2)}", style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                  Text("• অর্জিত মোট লাভ: ৳${widget.member.profitEarned.toStringAsFixed(2)}", style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.blue)),
-                  Text("• সর্বমোট ব্যালেন্স: ৳${widget.member.totalBalance.toStringAsFixed(2)}", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
-                  const Divider(),
-                  if (widget.member.dueAmount > 0)
-                    Text("• বকেয়া কিস্তি (${widget.member.dueMonthsCount} মাসের হিসাবে): ৳${widget.member.dueAmount.toStringAsFixed(2)}", style: const TextStyle(fontSize: 15, color: Colors.red, fontWeight: FontWeight.bold))
-                  else if (widget.member.advanceAmount > 0)
-                    Text("• অতিরিক্ত জমা (Advance): ৳${widget.member.advanceAmount.toStringAsFixed(2)}", style: const TextStyle(fontSize: 15, color: Colors.teal, fontWeight: FontWeight.bold))
-                  else
-                    const Text("• বকেয়া: ৳০ (পরিশোধিত)", style: TextStyle(fontSize: 15, color: Colors.green, fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ),
-            const SizedBox(height: 15),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.pink, foregroundColor: Colors.white),
-                onPressed: _showDepositDialog,
-                icon: const Icon(Icons.account_balance_wallet),
-                label: const Text("অনলাইনে কিস্তি জমা দিন (bKash / Bank)", style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text("🗓 আপনার জমা ও লাভের হিসাবের ইতিহাস:", style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 10),
-            Expanded(
-              child: widget.member.transactions.isEmpty
-                  ? const Center(child: Text("এখনো কোনো জমা এন্ট্রি হয়নি।"))
-                  : ListView.builder(
-                      itemCount: widget.member.transactions.length,
-                      itemBuilder: (context, index) {
-                        final tx = widget.member.transactions[index];
-                        return Card(
-                          margin: const EdgeInsets.symmetric(vertical: 4),
-                          child: ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: tx.isProfit ? Colors.blue : (tx.paymentMethod.contains('bKash') ? Colors.pink : Colors.green),
-                              child: Icon(tx.isProfit ? Icons.trending_up : Icons.attach_money, color: Colors.white),
-                            ),
-                            title: Text("${tx.isProfit ? 'লাভ যোগ:' : 'জমা:'} ৳${tx.amount.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Text("তারিখ: ${tx.date.day}/${tx.date.month}/${tx.date.year} | মাধ্যম: ${tx.paymentMethod}"),
-                            trailing: tx.trxId.isNotEmpty ? Text("ID: ${tx.trxId}", style: const TextStyle(fontSize: 11, color: Colors.grey)) : null,
-                          ),
-                        );
-                      },
-                    ),
-            ),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                ),
-                onPressed: () async {
-                  String memberText = "=== [$globalSocietyName] সদস্য স্টেটমেন্ট ===\n\n";
-                  memberText += "নাম: ${widget.member.name} (ID: ${widget.member.id})\n";
-                  memberText += "মোবাইল: ${widget.member.mobile}\n";
-                  memberText += "মূল জমা: ৳${widget.member.deposit}\n";
-                  memberText += "অর্জিত লাভ: ৳${widget.member.profitEarned}\n";
-                  memberText += "সর্বমোট ব্যালেন্স: ৳${widget.member.totalBalance}\n\nলেনদেনসমূহ:\n";
-                  for (var t in widget.member.transactions) {
-                    memberText += "- ${t.date.day}/${t.date.month}/${t.date.year}: ৳${t.amount} (${t.paymentMethod})\n";
-                  }
-                  await saveReportToFile(context, "${widget.member.name}_Statement.txt", memberText);
-                },
-                icon: const Icon(Icons.download),
-                label: const Text(
-                  "বিস্তারিত স্টেটমেন্ট ডাউনলোড করুন (ফাইল সেভ)",
-                  style: TextStyle(fontSize: 14),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
