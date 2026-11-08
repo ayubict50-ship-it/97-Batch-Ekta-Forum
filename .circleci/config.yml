@@ -21,15 +21,15 @@ jobs:
             source $BASH_ENV
             flutter doctor
 
-      - run:
-          name: Clear Gradle Cache and Use Gradle 8.7
+    - run:
+          name: Clear Gradle Cache and Use Gradle 8.11.1
           command: |
             rm -rf ~/.gradle/caches/
             rm -rf ~/.android/cache/
             mkdir -p android/gradle/wrapper
             echo "distributionBase=GRADLE_USER_HOME" > android/gradle/wrapper/gradle-wrapper.properties
             echo "distributionPath=wrapper/dists" >> android/gradle/wrapper/gradle-wrapper.properties
-            echo "distributionUrl=https\://services.gradle.org/distributions/gradle-8.7-bin.zip" >> android/gradle/wrapper/gradle-wrapper.properties
+            echo "distributionUrl=https\://services.gradle.org/distributions/gradle-8.11.1-bin.zip" >> android/gradle/wrapper/gradle-wrapper.properties
             echo "zipStoreBase=GRADLE_USER_HOME" >> android/gradle/wrapper/gradle-wrapper.properties
             echo "zipStorePath=wrapper/dists" >> android/gradle/wrapper/gradle-wrapper.properties
 
