@@ -21,7 +21,7 @@ jobs:
             source $BASH_ENV
             flutter doctor
 
-    - run:
+      - run:
           name: Clear Gradle Cache and Use Gradle 8.11.1
           command: |
             rm -rf ~/.gradle/caches/
