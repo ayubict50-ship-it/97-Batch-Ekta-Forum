@@ -22,14 +22,14 @@ jobs:
             flutter doctor
 
       - run:
-          name: Clear Gradle Cache Completely and Upgrade Gradle to 8.11.1
+          name: Clear Gradle Cache Completely and Upgrade Gradle to 8.14.0
           command: |
             rm -rf ~/.gradle/caches/
             rm -rf ~/.android/cache/
             mkdir -p android/gradle/wrapper
             echo "distributionBase=GRADLE_USER_HOME" > android/gradle/wrapper/gradle-wrapper.properties
             echo "distributionPath=wrapper/dists" >> android/gradle/wrapper/gradle-wrapper.properties
-            echo "distributionUrl=https\://services.gradle.org/distributions/gradle-8.11.1-all.zip" >> android/gradle/wrapper/gradle-wrapper.properties
+            echo "distributionUrl=https\://services.gradle.org/distributions/gradle-8.14.0-all.zip" >> android/gradle/wrapper/gradle-wrapper.properties
             echo "zipStoreBase=GRADLE_USER_HOME" >> android/gradle/wrapper/gradle-wrapper.properties
             echo "zipStorePath=wrapper/dists" >> android/gradle/wrapper/gradle-wrapper.properties
 
@@ -81,7 +81,6 @@ jobs:
             export PATH="$HOME/flutter/bin:$PATH"
             flutter build apk --release --no-tree-shake-icons
             
-            # প্রজেক্টের যেকোনো জায়গা থেকে এপিকে খুঁজে বের করে সঠিক ফোল্ডারে কপি করা
             mkdir -p build/app/outputs/flutter-apk/
             find . -name "*.apk" -exec cp {} build/app/outputs/flutter-apk/ \;
             ls -la build/app/outputs/flutter-apk/
