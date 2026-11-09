@@ -333,7 +333,7 @@ Future<void> saveReportToFile(BuildContext context, String fileName, String cont
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("फাইল ডাউনলোডে সেভ হয়েছে:\n${file.path}")),
+        SnackBar(content: Text("ফাইল ডাউনলোডে সেভ হয়েছে:\n${file.path}")),
       );
     }
   } catch (e) {
@@ -2101,3 +2101,123 @@ class _MemberDashboardState extends State<MemberDashboard> {
                   if (amount != null && amount > 0 && _trxController.text.isNotEmpty) {
                     setState(() {
                       widget.member.deposit += amount;
+                      widget.member.transactions.add(
+                        TransactionHistory(
+                          date: DateTime.now(),
+                          amount: amount,
+                          paymentMethod: 'অনলাইন ($_selectedMethod)',
+                          trxId: _trxController.text.trim(),
+                        ),
+                      );
+                    });
+                    await CloudDatabaseService.syncAllDataToCloud();
+                    if (mounted) {
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("আপনার জমার রিকোয়েস্ট সফলভাবে যুক্ত ও ক্লাউডে সেভ হয়েছে!")),
+                      );
+                    }
+                  }
+                },
+                child: const Text("জমা নিশ্চিত করুন"),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text("${widget.member.name} - সদস্য ড্যাশবোর্ড"),
+        backgroundColor: Colors.green,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.vpn_key),
+            tooltip: "পিন পরিবর্তন",
+            onPressed: _showChangePinDialog,
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const LoginScreen()),
+              );
+            },
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.green.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("স্বাগতম, ${widget.member.name}!", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green)),
+                  const SizedBox(height: 6),
+                  Text("আইডি: ${widget.member.id} | মোবাইল: ${widget.member.mobile}"),
+                  const Divider(),
+                  Text("• মূল জমা: ৳${widget.member.deposit.toStringAsFixed(0)}", style: const TextStyle(fontSize: 15)),
+                  Text("• অর্জিত লাভ: ৳${widget.member.profitEarned.toStringAsFixed(0)}", style: const TextStyle(fontSize: 15, color: Colors.blue)),
+                  Text("• সর্বমোট ব্যালেন্স: ৳${widget.member.totalBalance.toStringAsFixed(0)}", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
+                  if (widget.member.dueAmount > 0)
+                    Text("• বকেয়া: ৳${widget.member.dueAmount.toStringAsFixed(0)} (${widget.member.dueMonthsCount} মাস)", style: const TextStyle(fontSize: 15, color: Colors.red, fontWeight: FontWeight.bold))
+                  else if (widget.member.advanceAmount > 0)
+                    Text("• অতিরিক্ত জমা: ৳${widget.member.advanceAmount.toStringAsFixed(0)}", style: const TextStyle(fontSize: 15, color: Colors.teal, fontWeight: FontWeight.bold))
+                  else
+                    const Text("• বকেয়া: ৳০", style: TextStyle(fontSize: 15, color: Colors.teal)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.pink, foregroundColor: Colors.white),
+                onPressed: _showDepositDialog,
+                icon: const Icon(Icons.payment),
+                label: const Text("অনলাইনে কিস্তি জমা দিন (bKash/Bank)", style: TextStyle(fontSize: 16)),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text("লেনদেনের ইতিহাস:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            widget.member.transactions.isEmpty
+                ? const Center(child: Text("কোনো লেনদেন রেকর্ড নেই।", style: TextStyle(color: Colors.grey)))
+                : ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: widget.member.transactions.length,
+                    itemBuilder: (context, index) {
+                      final tx = widget.member.transactions[index];
+                      return Card(
+                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        child: ListTile(
+                          title: Text("${tx.date.day}/${tx.date.month}/${tx.date.year} — ৳${tx.amount.toStringAsFixed(0)}", style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text("${tx.paymentMethod} ${tx.trxId.isNotEmpty ? '(Trx: ${tx.trxId})' : ''}"),
+                        ),
+                      );
+                    },
+                  ),
+          ],
+        ),
+      ),
+    );
+  }
+}
