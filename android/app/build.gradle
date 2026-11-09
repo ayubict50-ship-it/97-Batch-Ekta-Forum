@@ -25,7 +25,7 @@ apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 apply plugin: 'dev.flutter.flutter-gradle-plugin'
 apply plugin: 'com.google.gms.google-services'
-apply plugin: 'com.google.firebase.crashlytics' // <-- ১. ক্র্যাশলিটিক্স প্লাগইন এখানে যোগ করা হলো
+apply plugin: 'com.google.firebase.crashlytics'
 
 android {
     namespace "com.example.batch_ekta_forum"
@@ -66,5 +66,5 @@ flutter {
 dependencies {
     implementation platform('com.google.firebase:firebase-bom:33.7.0')
     implementation 'com.google.firebase:firebase-analytics'
-    implementation 'com.google.firebase:firebase-crashlytics' // <-- ২. ক্র্যাশলিটিক্স ডিপেন্ডেন্সি এখানে যোগ করা হলো
+    implementation 'com.google.firebase:firebase-crashlytics' 
 }
