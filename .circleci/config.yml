@@ -73,12 +73,11 @@ jobs:
             flutter clean
             flutter pub get
 
-      - run:
+     - run:
           name: Build APK Release
           command: |
             export PATH="$HOME/flutter/bin:$PATH"
-            flutter build apk --release --no-tree-shake-icons --android-skip-build-dependency-validation
-
+            flutter build apk --release --no-tree-shake-icons --android-skip-build-dependency-validation --target-platform android-arm,android-arm64
       - run:
           name: Collect and Organize APK Artifacts
           command: |
