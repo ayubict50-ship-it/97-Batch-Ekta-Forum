@@ -14,7 +14,6 @@ void main() async {
   try {
     await Firebase.initializeApp();
     
-    // ক্র্যাশলিটিক্স সেটআপ (এখানে যুক্ত করা হয়েছে)
     FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
 
     PlatformDispatcher.instance.onError = (error, stack) {
@@ -2114,8 +2113,9 @@ class _MemberDashboardState extends State<MemberDashboard> {
                     await CloudDatabaseService.syncAllDataToCloud();
                     if (mounted) {
                       Navigator.pop(ctx);
+                      // এখানে const বাদ দেওয়া হয়েছে যাতে বিল্ডে এরর না আসে
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("৳$amount টাকা সঞ্চয় জমা হিসেবে রেকর্ড ও ক্লাউডে সেভ হয়েছে!")),
+                        SnackBar(content: Text("৳$amount টাকা সঞ্চয় জমা হিসেবে রেকর্ড ও ক্লাউডে সেভ হয়েছে!")),
                       );
                     }
                   }
