@@ -22,51 +22,14 @@ jobs:
             flutter doctor
 
       - run:
-          name: Clear Gradle Cache and Use Gradle 8.11.1
+          name: Configure Gradle Wrapper
           command: |
-            rm -rf ~/.gradle/caches/
-            rm -rf ~/.android/cache/
             mkdir -p android/gradle/wrapper
             echo "distributionBase=GRADLE_USER_HOME" > android/gradle/wrapper/gradle-wrapper.properties
             echo "distributionPath=wrapper/dists" >> android/gradle/wrapper/gradle-wrapper.properties
-            echo "distributionUrl=https\://services.gradle.org/distributions/gradle-8.11.1-bin.zip" >> android/gradle/wrapper/gradle-wrapper.properties
+            echo "distributionUrl=https\://services.gradle.org/distributions/gradle-8.8-bin.zip" >> android/gradle/wrapper/gradle-wrapper.properties
             echo "zipStoreBase=GRADLE_USER_HOME" >> android/gradle/wrapper/gradle-wrapper.properties
             echo "zipStorePath=wrapper/dists" >> android/gradle/wrapper/gradle-wrapper.properties
-
-      - run:
-          name: Deep Force Override AGP to 8.9.1 across all project files
-          command: |
-            python3 -c '
-            import os
-            import re
-
-            target_version = "8.9.1"
-            
-            for root, dirs, files in os.walk("."):
-                if ".git" in root or "flutter" in root:
-                    continue
-                for file in files:
-                    if file == "build.gradle" or file == "gradle.properties" or file.endswith(".gradle"):
-                        file_path = os.path.join(root, file)
-                        try:
-                            with open(file_path, "r", encoding="utf-8") as f:
-                                content = f.read()
-                            
-                            updated = False
-                            if "com.android.tools.build:gradle" in content:
-                                content = re.sub(r"com\.android\.tools\.build:gradle:[^'\''\" ]+", f"com.android.tools.build:gradle:{target_version}", content)
-                                updated = True
-                                
-                            if "8.4.0" in content:
-                                content = content.replace("8.4.0", target_version)
-                                updated = True
-
-                            if updated:
-                                with open(file_path, "w", encoding="utf-8") as f:
-                                    f.write(content)
-                        except Exception as e:
-                            pass
-            '
 
       - run:
           name: Install Dependencies
@@ -80,8 +43,12 @@ jobs:
           command: |
             export PATH="$HOME/flutter/bin:$PATH"
             flutter build apk --release --no-tree-shake-icons --android-skip-build-dependency-validation
+
+      - run:
+          name: Collect and Organize APK Artifacts
+          command: |
             mkdir -p build/app/outputs/flutter-apk/
-            find . -name "*.apk" -exec cp {} build/app/outputs/flutter-apk/ \;
+            find build/ -name "*.apk" -exec cp {} build/app/outputs/flutter-apk/ \;
             ls -la build/app/outputs/flutter-apk/
 
       - store_artifacts:
