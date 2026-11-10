@@ -43,7 +43,7 @@ jobs:
             cp "$HOME/wrapper-generator/gradlew.bat" android/
             cp "$HOME/wrapper-generator/gradle/wrapper/gradle-wrapper.jar" android/gradle/wrapper/
 
-            cat > android/gradle/wrapper/gradle-wrapper.properties <<'EOF'
+          cat > android/gradle/wrapper/gradle-wrapper.properties \<<'EOF'
             distributionBase=GRADLE_USER_HOME
             distributionPath=wrapper/dists
             distributionUrl=https\://services.gradle.org/distributions/gradle-8.14.2-bin.zip
