@@ -46,12 +46,14 @@ jobs:
             flutter pub get
 
       - run:
-          name: Build App Bundle Release
+          name: Build App Bundle Release via Gradle
           command: |
             export PATH="$HOME/flutter/bin:$PATH"
-            flutter build appbundle --release --android-skip-build-dependency-validation
+            cd android
+            ./gradlew bundleRelease
+            cd ..
             mkdir -p build/app/outputs/bundle/release/
-            find . -name "*.aab" ! -path "*/.*" -exec cp {} build/app/outputs/bundle/release/ \;
+            find android/app/build/outputs/bundle/release/ -name "*.aab" -exec cp {} build/app/outputs/bundle/release/ \;
             ls -la build/app/outputs/bundle/release/
 
       - store_artifacts:
