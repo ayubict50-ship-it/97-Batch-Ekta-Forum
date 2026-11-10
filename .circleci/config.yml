@@ -30,7 +30,8 @@ jobs:
           name: Force Override AGP Version Everywhere
           command: |
             find . -name "build.gradle" -o -name "*.gradle" | while read file; do
-              sed -i 's/8.4.0/8.9.1/g' "$file"
+              sed -i 's/8.4.0/8.11.1/g' "$file"
+              sed -i 's/8.9.1/8.11.1/g' "$file"
             done
 
       - run:
