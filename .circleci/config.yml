@@ -9,34 +9,12 @@ jobs:
       - checkout
 
       - run:
-          name: Install Ninja and CMake for Native Build
-          command: |
-            sudo apt-get update && sudo apt-get install -y ninja-build cmake
-
-      - run:
           name: Install Flutter
           command: |
             git clone https://github.com/flutter/flutter.git -b stable ~/flutter
             echo 'export PATH="$HOME/flutter/bin:$PATH"' >> $BASH_ENV
             source $BASH_ENV
             flutter doctor
-
-      - run:
-          name: Configure Gradle Wrapper
-          command: |
-            mkdir -p android/gradle/wrapper
-            echo "distributionBase=GRADLE_USER_HOME" > android/gradle/wrapper/gradle-wrapper.properties
-            echo "distributionPath=wrapper/dists" >> android/gradle/wrapper/gradle-wrapper.properties
-            echo "distributionUrl=https\://services.gradle.org/distributions/gradle-8.11.1-bin.zip" >> android/gradle/wrapper/gradle-wrapper.properties
-            echo "zipStoreBase=GRADLE_USER_HOME" >> android/gradle/wrapper/gradle-wrapper.properties
-            echo "zipStorePath=wrapper/dists" >> android/gradle/wrapper/gradle-wrapper.properties
-
-      - run:
-          name: Force Override AGP Version Everywhere
-          command: |
-            find . -name "build.gradle" -o -name "*.gradle" | while read file; do
-              sed -i 's/8.4.0/8.9.1/g' "$file"
-            done
 
       - run:
           name: Install Dependencies
@@ -49,14 +27,7 @@ jobs:
           name: Build APK Release
           command: |
             export PATH="$HOME/flutter/bin:$PATH"
-            flutter build apk --release --split-per-abi --no-tree-shake-icons --android-skip-build-dependency-validation
-
-      - run:
-          name: Collect and Organize APK Artifacts
-          command: |
-            mkdir -p build/app/outputs/flutter-apk/
-            find . -name "*.apk" -exec cp {} build/app/outputs/flutter-apk/ \;
-            ls -la build/app/outputs/flutter-apk/
+            flutter build apk --release
 
       - store_artifacts:
           path: build/app/outputs/flutter-apk/
