@@ -35,22 +35,21 @@ jobs:
             done
 
       - run:
-          name: Install Dependencies
+          name: Install Dependencies and Generate Wrapper
           command: |
             export PATH="$HOME/flutter/bin:$PATH"
             flutter clean
             flutter pub get
+            cd android
+            gradle wrapper --gradle-version 8.14.2
+            chmod +x gradlew
+            cd ..
 
       - run:
-          name: Build App Bundle via Gradle Directly
+          name: Build Release App Bundle
           command: |
             export PATH="$HOME/flutter/bin:$PATH"
-            cd android
-            ./gradlew bundleRelease
-            cd ..
-            mkdir -p build/app/outputs/bundle/release/
-            cp android/app/build/outputs/bundle/release/app-release.aab build/app/outputs/bundle/release/
-            ls -la build/app/outputs/bundle/release/
+            flutter build appbundle --release --android-skip-build-dependency-validation
 
       - store_artifacts:
           path: build/app/outputs/bundle/release/
