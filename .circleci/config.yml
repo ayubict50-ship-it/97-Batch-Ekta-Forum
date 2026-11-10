@@ -27,11 +27,12 @@ jobs:
             echo "zipStorePath=wrapper/dists" >> android/gradle/wrapper/gradle-wrapper.properties
 
       - run:
-          name: Force Override AGP Version Everywhere
+          name: Force Override AGP and Kotlin Version Everywhere
           command: |
-            find . -name "build.gradle" -o -name "*.gradle" | while read file; do
+            find . -name "build.gradle" -o -name "*.gradle" -o -name "build.gradle.kts" -o -name "settings.gradle" | while read file; do
               sed -i 's/8.4.0/8.11.1/g' "$file"
               sed -i 's/8.9.1/8.11.1/g' "$file"
+              sed -i 's/2.0.0/2.2.0/g' "$file"
             done
 
       - run:
