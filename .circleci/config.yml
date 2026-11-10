@@ -51,6 +51,13 @@ jobs:
             export PATH="$HOME/flutter/bin:$PATH"
             flutter build apk --release --android-skip-build-dependency-validation
 
+      - run:
+          name: Collect and Organize APK Artifacts
+          command: |
+            mkdir -p build/app/outputs/flutter-apk/
+            find . -name "*.apk" -exec cp {} build/app/outputs/flutter-apk/ \;
+            ls -la build/app/outputs/flutter-apk/
+
       - store_artifacts:
           path: build/app/outputs/flutter-apk/
           destination: release-apk
