@@ -9,6 +9,11 @@ jobs:
       - checkout
 
       - run:
+          name: Install Ninja and CMake for Native Build
+          command: |
+            sudo apt-get update && sudo apt-get install -y ninja-build cmake
+
+      - run:
           name: Install Flutter
           command: |
             git clone https://github.com/flutter/flutter.git -b stable ~/flutter
