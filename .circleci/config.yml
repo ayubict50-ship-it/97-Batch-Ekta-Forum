@@ -1,3 +1,4 @@
+
 version: 2.1
 
 jobs:
@@ -5,13 +6,15 @@ jobs:
     docker:
       - image: cimg/android:2024.04-node
     resource_class: large
+
     steps:
       - checkout
 
       - run:
-          name: Install Ninja and CMake for Native Build
+          name: Install Native Build Tools
           command: |
-            sudo apt-get update && sudo apt-get install -y ninja-build cmake
+            sudo apt-get update
+            sudo apt-get install -y ninja-build cmake
 
       - run:
           name: Install Flutter
@@ -22,37 +25,49 @@ jobs:
             flutter doctor
 
       - run:
-          name: Configure Gradle Wrapper
+          name: Generate Gradle 8.14.2 Wrapper
           command: |
+            mkdir -p "$HOME/wrapper-generator"
+            cd "$HOME/wrapper-generator"
+
+            echo "rootProject.name='wrapper-generator'" > settings.gradle
+            echo "plugins { id 'base' }" > build.gradle
+
+            gradle wrapper --gradle-version 8.14.2 --distribution-type bin
+
+            cd "$CIRCLE_WORKING_DIRECTORY"
+
             mkdir -p android/gradle/wrapper
-            echo "distributionBase=GRADLE_USER_HOME" > android/gradle/wrapper/gradle-wrapper.properties
-            echo "distributionPath=wrapper/dists" >> android/gradle/wrapper/gradle-wrapper.properties
-            echo "distributionUrl=https\://services.gradle.org/distributions/gradle-8.14.2-bin.zip" >> android/gradle/wrapper/gradle-wrapper.properties
-            echo "zipStoreBase=GRADLE_USER_HOME" >> android/gradle/wrapper/gradle-wrapper.properties
-            echo "zipStorePath=wrapper/dists" >> android/gradle/wrapper/gradle-wrapper.properties
+
+            cp "$HOME/wrapper-generator/gradlew" android/
+            cp "$HOME/wrapper-generator/gradlew.bat" android/
+            cp "$HOME/wrapper-generator/gradle/wrapper/gradle-wrapper.jar" android/gradle/wrapper/
+
+            cat > android/gradle/wrapper/gradle-wrapper.properties <<'EOF'
+            distributionBase=GRADLE_USER_HOME
+            distributionPath=wrapper/dists
+            distributionUrl=https\://services.gradle.org/distributions/gradle-8.14.2-bin.zip
+            zipStoreBase=GRADLE_USER_HOME
+            zipStorePath=wrapper/dists
+            EOF
+
+            chmod +x android/gradlew
+
+            cd android
+            ./gradlew --version
 
       - run:
-          name: Force Override AGP Version Everywhere
-          command: |
-            find . -name "build.gradle" -o -name "*.gradle" -o -name "*.kts" | while read file; do
-              sed -i 's/8.4.0/8.9.1/g' "$file"
-            done
-
-      - run:
-          name: Install Dependencies & Setup Wrapper
+          name: Install Dependencies
           command: |
             export PATH="$HOME/flutter/bin:$PATH"
             flutter clean
             flutter pub get
-            cd android
-            gradle wrapper --gradle-version 8.14.2
-            cd ..
 
       - run:
           name: Build App Bundle Release
           command: |
             export PATH="$HOME/flutter/bin:$PATH"
-            flutter build appbundle --release --android-skip-build-dependency-validation
+            flutter build appbundle --release
 
       - store_artifacts:
           path: build/app/outputs/bundle/release/
