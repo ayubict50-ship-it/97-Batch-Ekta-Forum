@@ -39,12 +39,12 @@ jobs:
             done
 
       - run:
-          name: Install Dependencies & Create Gradle Wrapper
+          name: Install Dependencies
           command: |
             export PATH="$HOME/flutter/bin:$PATH"
             flutter clean
             flutter pub get
-            cd android && ./gradlew wrapper --gradle-version 8.14.2 && cd ..
+            flutter precache --android
 
       - run:
           name: Build App Bundle Release
@@ -52,7 +52,6 @@ jobs:
             export PATH="$HOME/flutter/bin:$PATH"
             flutter build appbundle --release --android-skip-build-dependency-validation
             
-            # ফ্লাটারের সঠিক পাথ থেকে .aab ফাইল কপি করে নিশ্চিত করা
             mkdir -p build/app/outputs/bundle/release/
             find . -name "*.aab" ! -path "*/.*" -exec cp {} build/app/outputs/bundle/release/ \;
             ls -la build/app/outputs/bundle/release/
