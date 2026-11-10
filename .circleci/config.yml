@@ -46,17 +46,14 @@ jobs:
             flutter pub get
 
       - run:
-          name: Build APK Release
+          name: Build App Bundle Release
           command: |
             export PATH="$HOME/flutter/bin:$PATH"
-            flutter build apk --release --android-skip-build-dependency-validation
-            mkdir -p build/app/outputs/flutter-apk/
-            find . -name "*.apk" ! -path "*/.*" -exec cp {} build/app/outputs/flutter-apk/ \;
-            ls -la build/app/outputs/flutter-apk/
+            flutter build appbundle --release --android-skip-build-dependency-validation
 
       - store_artifacts:
-          path: build/app/outputs/flutter-apk/
-          destination: release-apk
+          path: build/app/outputs/bundle/release/
+          destination: release-bundle
 
 workflows:
   version: 2
