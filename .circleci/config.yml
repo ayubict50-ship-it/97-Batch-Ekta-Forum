@@ -50,10 +50,8 @@ jobs:
           command: |
             export PATH="$HOME/flutter/bin:$PATH"
             flutter build apk --release --android-skip-build-dependency-validation
-            
-            # ফ্লাটারের সঠিক পাথ থেকে এপিকে ফাইল কপি করে নিশ্চিত করা
             mkdir -p build/app/outputs/flutter-apk/
-            cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/ || find . -name "app-release.apk" -exec cp {} build/app/outputs/flutter-apk/ \;
+            find . -name "app-release.apk" -exec cp {} build/app/outputs/flutter-apk/ \;
             ls -la build/app/outputs/flutter-apk/
 
       - store_artifacts:
