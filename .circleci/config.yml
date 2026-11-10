@@ -27,6 +27,13 @@ jobs:
             echo "zipStorePath=wrapper/dists" >> android/gradle/wrapper/gradle-wrapper.properties
 
       - run:
+          name: Force Override AGP Version Everywhere
+          command: |
+            find . -name "build.gradle" -o -name "*.gradle" -o -name "*.kts" | while read file; do
+              sed -i 's/8.4.0/8.9.1/g' "$file"
+            done
+
+      - run:
           name: Install Dependencies
           command: |
             export PATH="$HOME/flutter/bin:$PATH"
