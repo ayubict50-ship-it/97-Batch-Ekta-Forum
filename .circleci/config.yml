@@ -22,10 +22,23 @@ jobs:
             flutter doctor
 
       - run:
-          name: Configure Gradle Wrapper Properties
+          name: Setup Gradle Wrapper
           command: |
-            mkdir -p android/gradle/wrapper
-            printf "distributionBase=GRADLE_USER_HOME\ndistributionPath=wrapper/dists\ndistributionUrl=https\\://services.gradle.org/distributions/gradle-8.14.2-bin.zip\nzipStoreBase=GRADLE_USER_HOME\nzipStorePath=wrapper/dists\n" > android/gradle/wrapper/gradle-wrapper.properties
+            # Build a throw-away project to generate a Gradle 8.14.2 wrapper
+            WRAPPER_TMP=$(mktemp -d)
+            cd "$WRAPPER_TMP"
+            echo "rootProject.name = 'wrapper-gen'" > settings.gradle
+            touch build.gradle
+            gradle wrapper --gradle-version 8.14.2 --distribution-type bin
+
+            # Install the wrapper files into the android project
+            mkdir -p "$CIRCLE_WORKING_DIRECTORY/android/gradle/wrapper"
+            cp gradlew "$CIRCLE_WORKING_DIRECTORY/android/gradlew"
+            cp gradle/wrapper/gradle-wrapper.jar \
+               "$CIRCLE_WORKING_DIRECTORY/android/gradle/wrapper/gradle-wrapper.jar"
+            chmod +x "$CIRCLE_WORKING_DIRECTORY/android/gradlew"
+            printf 'distributionBase=GRADLE_USER_HOME\ndistributionPath=wrapper/dists\ndistributionUrl=https\\://services.gradle.org/distributions/gradle-8.14.2-bin.zip\nzipStoreBase=GRADLE_USER_HOME\nzipStorePath=wrapper/dists\n' \
+              > "$CIRCLE_WORKING_DIRECTORY/android/gradle/wrapper/gradle-wrapper.properties"
 
       - run:
           name: Force Override AGP Version Everywhere
@@ -35,15 +48,11 @@ jobs:
             done
 
       - run:
-          name: Install Dependencies and Generate Wrapper
+          name: Install Dependencies
           command: |
             export PATH="$HOME/flutter/bin:$PATH"
             flutter clean
             flutter pub get
-            cd android
-            gradle wrapper --gradle-version 8.14.2
-            chmod +x gradlew
-            cd ..
 
       - run:
           name: Build Release App Bundle
