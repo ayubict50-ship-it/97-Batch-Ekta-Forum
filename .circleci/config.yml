@@ -1,0 +1,35 @@
+version: 2.1
+
+jobs:
+  build:
+    working_directory: ~/repo
+    docker:
+      - image: cimg/android:2024.04-node
+    resource_class: large
+    steps:
+      - checkout
+
+      - run:
+          name: Install Flutter
+          command: |
+            git clone https://github.com/flutter/flutter.git -b 3.24.3 ~/flutter
+            echo 'export PATH="$HOME/flutter/bin:$PATH"' >> $BASH_ENV
+            source $BASH_ENV
+            flutter doctor
+
+      - run:
+          name: Clean and Get Packages
+          command: |
+            export PATH="$HOME/flutter/bin:$PATH"
+            flutter clean
+            flutter pub get
+
+      - run:
+          name: Build APK Release
+          command: |
+            export PATH="$HOME/flutter/bin:$PATH"
+            flutter build apk --release --no-tree-shake-icons
+
+      - store_artifacts:
+          path: build/app/outputs/flutter-apk/app-release.apk
+          destination: apk/app-release.apk
