@@ -19,7 +19,4 @@ workflows:
     artifacts:
       - build/app/outputs/bundle/release/*.aab
       - build/app/outputs/flutter-apk/*.apk
-      - **/build/app/outputs/**/*.apk
-      - **/build/app/outputs/**/*.aab
-      - $HOME/clone/build/app/outputs/**/*.apk
-      - $HOME/clone/build/app/outputs/**/*.aab
+      - build/app/outputs/flutter-apk/app-release.apk
