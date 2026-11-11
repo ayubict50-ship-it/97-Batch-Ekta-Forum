@@ -4,7 +4,6 @@ workflows:
     environment:
       flutter: 3.24.3
       java: 17
-      android_sdk: 34
     scripts:
       - name: Clean and Get packages
         script: |
