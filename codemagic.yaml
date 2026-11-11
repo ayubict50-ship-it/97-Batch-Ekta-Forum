@@ -21,9 +21,5 @@ workflows:
           find build/ -name "*.aab" -exec cp {} build/app/outputs/bundle/release/ \;
           find build/ -name "*.apk" -exec cp {} build/app/outputs/flutter-apk/ \;
 artifacts:
-  publishing:
-    email:
-      recipients:
-        - ayubict50@gmail.com
-  build/app/outputs/bundle/release/*.aab
-  build/app/outputs/flutter-apk/*.apk
+  - build/app/outputs/bundle/release/*.aab
+  - build/app/outputs/flutter-apk/*.apk
