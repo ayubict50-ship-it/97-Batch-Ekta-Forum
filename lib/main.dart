@@ -318,6 +318,23 @@ class SamobayFinance {
 
 Future<void> saveReportToFile(BuildContext context, String fileName, String content) async {
   try {
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.Page(
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(globalSocietyName, style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 10),
+              pw.Text(content, style: const pw.TextStyle(fontSize: 12)),
+            ],
+          );
+        },
+      ),
+    );
+
     Directory? directory;
     if (Platform.isAndroid) {
       directory = Directory('/storage/emulated/0/Download');
@@ -328,22 +345,22 @@ Future<void> saveReportToFile(BuildContext context, String fileName, String cont
       directory = await getApplicationDocumentsDirectory();
     }
 
-    final File file = File('${directory?.path}/$fileName');
-    await file.writeAsString(content);
+    final String actualFileName = fileName.endsWith('.pdf') ? fileName : '${fileName.replaceAll(RegExp(r'\.txt$'), '')}.pdf';
+    final File file = File('${directory?.path}/$actualFileName');
+    await file.writeAsBytes(await pdf.save());
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("ফাইল ডাউনলোডে সেভ হয়েছে:\n${file.path}")),
+        SnackBar(content: Text("PDF ফাইল ডাউনলোড ফোল্ডারে সেভ হয়েছে:\n${file.path}")),
       );
     }
-  } catch (e) {
-    final directory = await getApplicationDocumentsDirectory();
-    final File file = File('${directory.path}/$fileName');
-    await file.writeAsString(content);
 
+    await OpenFile.open(file.path);
+  } catch (e) {
+    debugPrint("PDF Save Error: $e");
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("ফাইল সেভ হয়েছে: ${file.path}")),
+        SnackBar(content: Text("PDF সেভ করতে সমস্যা হয়েছে: $e")),
       );
     }
   }
