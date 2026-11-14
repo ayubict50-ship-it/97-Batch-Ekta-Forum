@@ -346,7 +346,7 @@ Future<void> saveReportToFile(BuildContext context, String fileName, String cont
       directory = await getApplicationDocumentsDirectory();
     }
 
-    final String actualFileName = fileName.endsWith('.pdf') ? fileName : '${fileName.replaceAll(RegExp(r'\.txt$'), '')}.pdf';
+    final String actualFileName = fileName.endsWith('.pdf') ? fileName : '${fileName.replaceAll(RegExp(r'\..+$'), '')}.pdf';
     final File file = File('${directory?.path}/$actualFileName');
     await file.writeAsBytes(await pdf.save());
 
@@ -1140,10 +1140,10 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                   for (var r in globalBusinessRecords) {
                     reportContent += "- ${r.title}: ${r.isIncome ? '+' : '-'}৳${r.amount} (${r.date.day}/${r.date.month}/${r.date.year})\n";
                   }
-                  await saveReportToFile(context, "Business_Ledger_${DateTime.now().millisecondsSinceEpoch}.txt", reportContent);
+                  await saveReportToFile(context, "Business_Ledger_${DateTime.now().millisecondsSinceEpoch}.pdf", reportContent);
                 },
                 icon: const Icon(Icons.download, size: 16),
-                label: const Text("ডাউনলোড/সেভ"),
+                label: const Text("ডাউনলোড/সেভ (PDF)"),
               ),
             ],
           );
@@ -1515,10 +1515,10 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               for (var t in member.transactions) {
                 statementText += "- ${t.date.day}/${t.date.month}/${t.date.year}: ৳${t.amount} (${t.paymentMethod})\n";
               }
-              await saveReportToFile(context, "Member_${member.name}_Statement.txt", statementText);
+              await saveReportToFile(context, "Member_${member.name}_Statement.pdf", statementText);
             },
             icon: const Icon(Icons.download, size: 16),
-            label: const Text("ফাইল ডাউনলোড (TXT)"),
+            label: const Text("ফাইল ডাউনলোড (PDF)"),
           ),
         ],
       ),
@@ -1648,10 +1648,10 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 allReport += "মূল জমা: ৳${m.deposit} | লাভ: ৳${m.profitEarned} | ব্যালেন্স: ৳${m.totalBalance}\n";
                 allReport += "বকেয়া/অগ্রিম: ${m.dueAmount > 0 ? 'Due ৳${m.dueAmount}' : 'Adv ৳${m.advanceAmount}'}\n------------------------------------------\n";
               }
-              await saveReportToFile(context, "All_Members_Report.txt", allReport);
+              await saveReportToFile(context, "All_Members_Report.pdf", allReport);
             },
             icon: const Icon(Icons.download, size: 16),
-            label: const Text("সকলের স্টেটমেন্ট ডাউনলোড"),
+            label: const Text("সকলের স্টেটমেন্ট ডাউনলোড (PDF)"),
           ),
         ],
       ),
@@ -2131,7 +2131,6 @@ class _MemberDashboardState extends State<MemberDashboard> {
                     await CloudDatabaseService.syncAllDataToCloud();
                     if (mounted) {
                       Navigator.pop(ctx);
-                      // এখানে const বাদ দেওয়া হয়েছে যাতে বিল্ডে এরর না আসে
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text("৳$amount টাকা সঞ্চয় জমা হিসেবে রেকর্ড ও ক্লাউডে সেভ হয়েছে!")),
                       );
@@ -2268,11 +2267,11 @@ class _MemberDashboardState extends State<MemberDashboard> {
                   for (var t in widget.member.transactions) {
                     memberText += "- ${t.date.day}/${t.date.month}/${t.date.year}: ৳${t.amount} (${t.paymentMethod})\n";
                   }
-                  await saveReportToFile(context, "${widget.member.name}_Statement.txt", memberText);
+                  await saveReportToFile(context, "${widget.member.name}_Statement.pdf", memberText);
                 },
                 icon: const Icon(Icons.download),
                 label: const Text(
-                  "বিস্তারিত স্টেটমেন্ট ডাউনলোড করুন (ফাইল সেভ)",
+                  "বিস্তারিত স্টেটমেন্ট ডাউনলোড করুন (PDF)",
                   style: TextStyle(fontSize: 14),
                 ),
               ),
