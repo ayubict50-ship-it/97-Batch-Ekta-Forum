@@ -337,15 +337,32 @@ Future<void> saveReportToFile(BuildContext context, String fileName, String cont
   try {
     final pdf = pw.Document();
 
+    // ফন্ট লোড করা হচ্ছে
+    final fontData = await rootBundle.load('assets/fonts/SolaimanLipi.ttf');
+    final ttf = pw.Font.ttf(fontData);
+
     pdf.addPage(
       pw.Page(
         build: (pw.Context context) {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Text(globalSocietyName, style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
+              pw.Text(
+                globalSocietyName, 
+                style: pw.TextStyle(
+                  font: ttf,
+                  fontSize: 20, 
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
               pw.SizedBox(height: 10),
-              pw.Text(content, style: const pw.TextStyle(fontSize: 12)),
+              pw.Text(
+                content, 
+                style: pw.TextStyle(
+                  font: ttf,
+                  fontSize: 12,
+                ),
+              ),
             ],
           );
         },
