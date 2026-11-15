@@ -9,6 +9,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:open_file/open_file.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -98,6 +99,8 @@ class BusinessRecord {
   final double amount;
   final bool isIncome;
   final DateTime date;
+  bool isSettled;
+  String? batchId;
 
   BusinessRecord({
     required this.id,
@@ -105,6 +108,8 @@ class BusinessRecord {
     required this.amount,
     required this.isIncome,
     required this.date,
+    this.isSettled = false,
+    this.batchId,
   });
 
   Map<String, dynamic> toJson() => {
@@ -113,6 +118,8 @@ class BusinessRecord {
         'amount': amount,
         'isIncome': isIncome,
         'date': date.toIso8601String(),
+        'isSettled': isSettled,
+        'batchId': batchId,
       };
 
   factory BusinessRecord.fromJson(Map<String, dynamic> json) => BusinessRecord(
@@ -121,6 +128,8 @@ class BusinessRecord {
         amount: (json['amount'] as num).toDouble(),
         isIncome: json['isIncome'],
         date: DateTime.parse(json['date']),
+        isSettled: json['isSettled'] ?? false,
+        batchId: json['batchId'],
       );
 }
 
@@ -130,6 +139,7 @@ class TransactionHistory {
   final String paymentMethod;
   final String trxId;
   final bool isProfit;
+  final String? batchId;
 
   TransactionHistory({
     required this.date,
@@ -137,6 +147,7 @@ class TransactionHistory {
     required this.paymentMethod,
     this.trxId = '',
     this.isProfit = false,
+    this.batchId,
   });
 
   Map<String, dynamic> toJson() => {
@@ -145,6 +156,7 @@ class TransactionHistory {
         'paymentMethod': paymentMethod,
         'trxId': trxId,
         'isProfit': isProfit,
+        'batchId': batchId,
       };
 
   factory TransactionHistory.fromJson(Map<String, dynamic> json) => TransactionHistory(
@@ -153,6 +165,7 @@ class TransactionHistory {
         paymentMethod: json['paymentMethod'],
         trxId: json['trxId'] ?? '',
         isProfit: json['isProfit'] ?? false,
+        batchId: json['batchId'],
       );
 }
 
@@ -241,6 +254,7 @@ class Member {
 
 List<Member> globalMembers = [];
 List<BusinessRecord> globalBusinessRecords = [];
+String? lastDistributionBatchId;
 
 class CloudDatabaseService {
   static final _db = FirebaseFirestore.instance;
@@ -260,6 +274,7 @@ class CloudDatabaseService {
         'societyName': globalSocietyName,
         'adminId': globalAdminId,
         'adminPassword': globalAdminPassword,
+        'lastDistributionBatchId': lastDistributionBatchId,
       });
     } catch (e) {
       debugPrint("Cloud Sync Error: $e");
@@ -291,6 +306,7 @@ class CloudDatabaseService {
         globalSocietyName = settingsDoc.data()?['societyName'] ?? globalSocietyName;
         globalAdminId = settingsDoc.data()?['adminId'] ?? globalAdminId;
         globalAdminPassword = settingsDoc.data()?['adminPassword'] ?? globalAdminPassword;
+        lastDistributionBatchId = settingsDoc.data()?['lastDistributionBatchId'];
       }
     } catch (e) {
       debugPrint("Cloud Load Error: $e");
@@ -299,20 +315,20 @@ class CloudDatabaseService {
 }
 
 class SamobayFinance {
-  static double get totalBusinessIncome {
-    return globalBusinessRecords.where((r) => r.isIncome).fold(0.0, (sum, item) => sum + item.amount);
+  static double get currentBusinessIncome {
+    return globalBusinessRecords.where((r) => r.isIncome && !r.isSettled).fold(0.0, (sum, item) => sum + item.amount);
   }
 
-  static double get totalBusinessExpense {
-    return globalBusinessRecords.where((r) => !r.isIncome).fold(0.0, (sum, item) => sum + item.amount);
+  static double get currentBusinessExpense {
+    return globalBusinessRecords.where((r) => !r.isIncome && !r.isSettled).fold(0.0, (sum, item) => sum + item.amount);
   }
 
   static double get totalProfitDistributed {
     return globalMembers.fold(0.0, (sum, item) => sum + item.profitEarned);
   }
 
-  static double get netProfit {
-    double profit = (totalBusinessIncome - totalBusinessExpense) - totalProfitDistributed;
+  static double get currentNetProfit {
+    double profit = currentBusinessIncome - currentBusinessExpense;
     return profit > 0 ? profit : 0.0;
   }
 }
@@ -942,7 +958,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                   TextField(
                     controller: titleController,
                     decoration: const InputDecoration(
-                      labelText: "বিবরণ (যেমন: ৭০ লক্ষ টাকার প্রজেক্ট লাভ)",
+                      labelText: "বিবরণ (যেমন: চলতি বছরের প্রজেক্ট লাভ)",
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -995,6 +1011,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                           amount: amt,
                           isIncome: isIncome,
                           date: postingDate,
+                          isSettled: false,
                         ),
                       );
                     });
@@ -1037,12 +1054,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text("মোট ব্যবসায়িক মুনাফা: ৳${SamobayFinance.totalBusinessIncome.toStringAsFixed(0)}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                              Text("মোট প্রজেক্ট খরচ: ৳${SamobayFinance.totalBusinessExpense.toStringAsFixed(0)}", style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                              Text("চলমান মুনাফা: ৳${SamobayFinance.currentBusinessIncome.toStringAsFixed(0)}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                              Text("চলমান খরচ: ৳${SamobayFinance.currentBusinessExpense.toStringAsFixed(0)}", style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                             ],
                           ),
                           const Divider(),
-                          Text("অবশিষ্ট নিট লাভ: ৳${SamobayFinance.netProfit.toStringAsFixed(2)}", style: const TextStyle(fontSize: 15, color: Colors.blue, fontWeight: FontWeight.bold)),
+                          Text("অবশিষ্ট বণ্টনযোগ্য নিট লাভ: ৳${SamobayFinance.currentNetProfit.toStringAsFixed(2)}", style: const TextStyle(fontSize: 15, color: Colors.blue, fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
@@ -1064,6 +1081,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                             itemBuilder: (context, index) {
                               final record = globalBusinessRecords[index];
                               return Card(
+                                color: record.isSettled ? Colors.grey.shade100 : Colors.white,
                                 margin: const EdgeInsets.symmetric(vertical: 6),
                                 child: Padding(
                                   padding: const EdgeInsets.all(10.0),
@@ -1074,9 +1092,21 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            Text(
-                                              record.title,
-                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    record.title,
+                                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                                  ),
+                                                ),
+                                                if (record.isSettled)
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                    decoration: BoxDecoration(color: Colors.orange.shade100, borderRadius: BorderRadius.circular(4)),
+                                                    child: const Text("বণ্টনকৃত", style: TextStyle(fontSize: 10, color: Colors.deepOrange, fontWeight: FontWeight.bold)),
+                                                  ),
+                                              ],
                                             ),
                                             const SizedBox(height: 2),
                                             Text(
@@ -1097,7 +1127,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                               color: record.isIncome ? Colors.green : Colors.red,
                                             ),
                                           ),
-                                          const SizedBox(width: 10),
+                                          const SizedBox(width: 6),
                                           IconButton(
                                             icon: const Icon(Icons.delete, color: Colors.red, size: 20),
                                             onPressed: () async {
@@ -1134,11 +1164,11 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 onPressed: () async {
                   Navigator.pop(ctx);
                   String reportContent = "=== [$globalSocietyName] ব্যবসার লাভ-ক্ষতি খতিয়ান ===\n\n";
-                  reportContent += "মোট ব্যবসায়িক মুনাফা: ৳${SamobayFinance.totalBusinessIncome}\n";
-                  reportContent += "মোট প্রজেক্ট খরচ: ৳${SamobayFinance.totalBusinessExpense}\n";
-                  reportContent += "অবশিষ্ট নিট লাভ: ৳${SamobayFinance.netProfit}\n\n বিস্তারিত এন্ট্রি:\n";
+                  reportContent += "চলমান মুনাফা: ৳${SamobayFinance.currentBusinessIncome}\n";
+                  reportContent += "চলমান খরচ: ৳${SamobayFinance.currentBusinessExpense}\n";
+                  reportContent += "অবশিষ্ট বণ্টনযোগ্য নিট লাভ: ৳${SamobayFinance.currentNetProfit}\n\nবিস্তারিত এন্ট্রি:\n";
                   for (var r in globalBusinessRecords) {
-                    reportContent += "- ${r.title}: ${r.isIncome ? '+' : '-'}৳${r.amount} (${r.date.day}/${r.date.month}/${r.date.year})\n";
+                    reportContent += "- ${r.title} [${r.isSettled ? 'বণ্টনকৃত' : 'চলমান'}]: ${r.isIncome ? '+' : '-'}৳${r.amount} (${r.date.day}/${r.date.month}/${r.date.year})\n";
                   }
                   await saveReportToFile(context, "Business_Ledger_${DateTime.now().millisecondsSinceEpoch}.pdf", reportContent);
                 },
@@ -1152,41 +1182,283 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     );
   }
 
-  void _distributeNetProfit() async {
-    double netP = SamobayFinance.netProfit;
-    double totalDepositCapital = totalCollection;
+  void _showProfitDistributionDialog() {
+    double netP = SamobayFinance.currentNetProfit;
 
-    if (totalDepositCapital == 0 || netP <= 0) {
+    if (netP <= 0 || globalMembers.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("বণ্টন করার মতো পর্যাপ্ত নিট লাভ নেই!")),
+        const SnackBar(content: Text("বণ্টন করার মতো পর্যাপ্ত চলমান নিট লাভ বা সদস্য নেই!")),
       );
       return;
     }
 
+    DateTime periodStart = DateTime(DateTime.now().year, 1, 1);
+    DateTime periodEnd = DateTime.now();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text("📅 তারিখ ও মূলধন অনুযায়ী লাভ বণ্টন"),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("বণ্টনযোগ্য নিট লাভ: ৳${netP.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 16)),
+                  const SizedBox(height: 10),
+                  const Text("সদস্যদের কিস্তি জমার তারিখ অনুযায়ী (টাকা × দিন) অনুপাতে এই লাভ ভাগ হবে।", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  const Divider(),
+                  Row(
+                    children: [
+                      Text("হিসাব শুরু: ${periodStart.day}/${periodStart.month}/${periodStart.year}"),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: periodStart,
+                            firstDate: DateTime(2015),
+                            lastDate: DateTime(2035),
+                          );
+                          if (picked != null) setDialogState(() => periodStart = picked);
+                        },
+                        child: const Text("তারিখ দিন"),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      Text("হিসাব শেষ: ${periodEnd.day}/${periodEnd.month}/${periodEnd.year}"),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: periodEnd,
+                            firstDate: DateTime(2015),
+                            lastDate: DateTime(2035),
+                          );
+                          if (picked != null) setDialogState(() => periodEnd = picked);
+                        },
+                        child: const Text("তারিখ দিন"),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade800, foregroundColor: Colors.white),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _executeTimeWeightedProfitDistribution(periodStart, periodEnd, netP);
+                },
+                child: const Text("নিশ্চিত বণ্টন করুন"),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _executeTimeWeightedProfitDistribution(DateTime periodStart, DateTime periodEnd, double netP) async {
+    if (periodEnd.isBefore(periodStart)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("শেষের তারিখ শুরুর তারিখের আগে হতে পারবে না!")),
+      );
+      return;
+    }
+
+    int totalPeriodDays = periodEnd.difference(periodStart).inDays + 1;
+    if (totalPeriodDays <= 0) totalPeriodDays = 1;
+
+    Map<String, double> memberCapitalDays = {};
+    double totalSocietyCapitalDays = 0.0;
+
+    for (var member in globalMembers) {
+      double mCapDays = 0.0;
+      double accountedDeposit = 0.0;
+
+      var depositTxs = member.transactions.where((t) => !t.isProfit).toList();
+      for (var tx in depositTxs) {
+        accountedDeposit += tx.amount;
+        if (tx.date.isAfter(periodEnd)) continue;
+
+        DateTime effectiveDate = tx.date.isBefore(periodStart) ? periodStart : tx.date;
+        int activeDays = periodEnd.difference(effectiveDate).inDays + 1;
+        if (activeDays > 0) {
+          mCapDays += (tx.amount * activeDays);
+        }
+      }
+
+      if (member.deposit > accountedDeposit) {
+        double diff = member.deposit - accountedDeposit;
+        DateTime effectiveJoin = member.joinDate.isBefore(periodStart) ? periodStart : member.joinDate;
+        if (!effectiveJoin.isAfter(periodEnd)) {
+          int activeDays = periodEnd.difference(effectiveJoin).inDays + 1;
+          if (activeDays > 0) {
+            mCapDays += (diff * activeDays);
+          }
+        }
+      }
+
+      memberCapitalDays[member.id] = mCapDays;
+      totalSocietyCapitalDays += mCapDays;
+    }
+
+    if (totalSocietyCapitalDays <= 0) {
+      double totalDep = totalCollection;
+      if (totalDep <= 0) return;
+      for (var member in globalMembers) {
+        memberCapitalDays[member.id] = member.deposit;
+        totalSocietyCapitalDays += member.deposit;
+      }
+    }
+
+    String newBatchId = DateTime.now().millisecondsSinceEpoch.toString();
+
     setState(() {
       for (var member in globalMembers) {
-        double shareRatio = member.deposit / totalDepositCapital;
-        double memberProfit = netP * shareRatio;
+        double weight = (memberCapitalDays[member.id] ?? 0.0) / totalSocietyCapitalDays;
+        double memberProfit = netP * weight;
 
-        member.profitEarned += memberProfit;
-        member.transactions.add(
-          TransactionHistory(
-            date: DateTime.now(),
-            amount: memberProfit,
-            paymentMethod: 'প্রজেক্ট নিট লাভ বণ্টন (মূলধনের অনুপাতে)',
-            isProfit: true,
-          ),
-        );
+        if (memberProfit > 0) {
+          member.profitEarned += memberProfit;
+          member.transactions.add(
+            TransactionHistory(
+              date: DateTime.now(),
+              amount: memberProfit,
+              paymentMethod: 'লাভ বণ্টন (${periodStart.day}/${periodStart.month}/${periodStart.year}-${periodEnd.day}/${periodEnd.month}/${periodEnd.year})',
+              isProfit: true,
+              batchId: newBatchId,
+            ),
+          );
+        }
       }
+
+      for (var record in globalBusinessRecords) {
+        if (!record.isSettled) {
+          record.isSettled = true;
+          record.batchId = newBatchId;
+        }
+      }
+
+      lastDistributionBatchId = newBatchId;
     });
 
     await CloudDatabaseService.syncAllDataToCloud();
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("নতুন প্রজেক্টের ৳${netP.toStringAsFixed(2)} লাভ বর্তমান মূলধনের অনুপাতে ন্যায়সংগতভাবে বণ্টন ও ক্লাউডে সেভ সম্পন্ন!")),
+        SnackBar(content: Text("৳${netP.toStringAsFixed(2)} লাভ জমাকৃত টাকার মেয়াদ অনুযায়ী বণ্টন সম্পন্ন এবং চলমান হিসাব ০.০০ করা হয়েছে!")),
       );
     }
+  }
+
+  void _showReverseProfitDialog() {
+    if (lastDistributionBatchId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("রিভার্স করার মতো কোনো সাম্প্রতিক লাভ বণ্টন পাওয়া যায়নি!")),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("⚠️ সর্বশেষ লাভ বণ্টন রিভার্স (Undo)"),
+        content: const Text("আপনি কি নিশ্চিত যে সর্বশেষ বণ্টনকৃত লাভটি বাতিল করতে চান? এতে সদস্যদের অ্যাকাউন্ট থেকে ওই লাভ মাইনাস হয়ে যাবে এবং চলমান ব্যবসায়িক মুনাফা আগের অবস্থায় ফিরে আসবে।"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("না, থাক")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _executeReverseProfit();
+            },
+            child: const Text("হ্যাঁ, রিভার্স করুন"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _executeReverseProfit() async {
+    if (lastDistributionBatchId == null) return;
+    String targetBatch = lastDistributionBatchId!;
+
+    setState(() {
+      for (var member in globalMembers) {
+        double deductedAmount = 0.0;
+        member.transactions.removeWhere((tx) {
+          if (tx.isProfit && tx.batchId == targetBatch) {
+            deductedAmount += tx.amount;
+            return true;
+          }
+          return false;
+        });
+        member.profitEarned -= deductedAmount;
+        if (member.profitEarned < 0) member.profitEarned = 0.0;
+      }
+
+      for (var record in globalBusinessRecords) {
+        if (record.batchId == targetBatch) {
+          record.isSettled = false;
+          record.batchId = null;
+        }
+      }
+
+      String? previousBatch;
+      for (var record in globalBusinessRecords.reversed) {
+        if (record.isSettled && record.batchId != null) {
+          previousBatch = record.batchId;
+          break;
+        }
+      }
+      lastDistributionBatchId = previousBatch;
+    });
+
+    await CloudDatabaseService.syncAllDataToCloud();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("সর্বশেষ লাভ বণ্টন সফলভাবে রিভার্স করা হয়েছে এবং পূর্বের হিসাব ফিরে এসেছে!")),
+      );
+    }
+  }
+
+  void _confirmDeleteMember(Member member) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("⚠️ সদস্য ডিলিট নিশ্চিতকরণ"),
+        content: Text("আপনি কি নিশ্চিত যে '${member.name}' (ID: ${member.id})-কে সমিতির তালিকা থেকে স্থায়ীভাবে মুছে ফেলতে চান? তাঁর সমস্ত জমা ও লেনদেনের হিসাব মুছে যাবে।"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () async {
+              setState(() {
+                globalMembers.removeWhere((m) => m.id == member.id);
+              });
+              await CloudDatabaseService.syncAllDataToCloud();
+              if (mounted) {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("${member.name}-কে তালিকা থেকে মুছে ফেলা হয়েছে!")),
+                );
+              }
+            },
+            child: const Text("হ্যাঁ, মুছে ফেলুন"),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _launchSmsApp(String phoneNumber, String message) async {
@@ -1533,56 +1805,67 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       ),
       builder: (ctx) => Padding(
         padding: const EdgeInsets.all(20.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              "${member.name} (ID: ${member.id})",
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green),
-            ),
-            const Text("কার্যক্রম নির্বাচন করুন", style: TextStyle(fontSize: 12, color: Colors.grey)),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.add_circle, color: Colors.green),
-              title: const Text("নতুন কিস্তি জমা দিন (+)"),
-              onTap: () {
-                Navigator.pop(ctx);
-                _showAddInstallmentDialog(member);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.edit, color: Colors.teal),
-              title: const Text("সদস্যের তথ্য এডিট করুন"),
-              onTap: () {
-                Navigator.pop(ctx);
-                _showEditMemberDialog(member);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.vpn_key, color: Colors.orange),
-              title: const Text("পিন রিসেট করুন"),
-              onTap: () {
-                Navigator.pop(ctx);
-                _resetPinDialog(member);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.message, color: Colors.blue),
-              title: const Text("সরাসরি SMS পাঠান"),
-              onTap: () {
-                Navigator.pop(ctx);
-                _sendSmsDialog(member);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.receipt_long, color: Colors.indigo),
-              title: const Text("হিসাব ও স্টেটমেন্ট দেখুন/ডাউনলোড"),
-              onTap: () {
-                Navigator.pop(ctx);
-                _showMemberStatementDialog(member);
-              },
-            ),
-          ],
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                "${member.name} (ID: ${member.id})",
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green),
+              ),
+              const Text("কার্যক্রম নির্বাচন করুন", style: TextStyle(fontSize: 12, color: Colors.grey)),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.add_circle, color: Colors.green),
+                title: const Text("নতুন কিস্তি জমা দিন (+)"),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showAddInstallmentDialog(member);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.edit, color: Colors.teal),
+                title: const Text("সদস্যের তথ্য এডিট করুন"),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showEditMemberDialog(member);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.vpn_key, color: Colors.orange),
+                title: const Text("পিন রিসেট করুন"),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _resetPinDialog(member);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.message, color: Colors.blue),
+                title: const Text("সরাসরি SMS পাঠান"),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _sendSmsDialog(member);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.receipt_long, color: Colors.indigo),
+                title: const Text("হিসাব ও স্টেটমেন্ট দেখুন/ডাউনলোড"),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showMemberStatementDialog(member);
+                },
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.delete_forever, color: Colors.red),
+                title: const Text("সদস্য মুছে ফেলুন (Delete)", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _confirmDeleteMember(member);
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1787,40 +2070,51 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                   const Divider(),
                   Text("• বর্তমান কিস্তি: ৳${globalInstallmentSlabs.isNotEmpty ? globalInstallmentSlabs.last.amount.toStringAsFixed(0) : '0'}/মাস", style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.teal)),
                   Text("• মোট সঞ্চয় (মূলধন): $totalCollection টাকা", style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                  Text("• মোট ব্যবসায়িক মুনাফা: ${SamobayFinance.totalBusinessIncome} টাকা", style: const TextStyle(fontSize: 14, color: Colors.green)),
-                  Text("• মোট প্রজেক্ট খরচ: ${SamobayFinance.totalBusinessExpense} টাকা", style: const TextStyle(fontSize: 14, color: Colors.red)),
-                  Text("• মোট বণ্টনকৃত লাভ: ${SamobayFinance.totalProfitDistributed.toStringAsFixed(2)} টাকা", style: const TextStyle(fontSize: 14, color: Colors.purple, fontWeight: FontWeight.bold)),
-                  Text("• নিট বণ্টনযোগ্য মুনাফা (অবশিষ্ট): ${SamobayFinance.netProfit.toStringAsFixed(2)} টাকা", style: const TextStyle(fontSize: 14, color: Colors.blue, fontWeight: FontWeight.bold)),
+                  Text("• চলমান ব্যবসায়িক মুনাফা: ${SamobayFinance.currentBusinessIncome} টাকা", style: const TextStyle(fontSize: 14, color: Colors.green)),
+                  Text("• চলমান প্রজেক্ট খরচ: ${SamobayFinance.currentBusinessExpense} টাকা", style: const TextStyle(fontSize: 14, color: Colors.red)),
+                  Text("• সর্বমোট বণ্টনকৃত লাভ: ${SamobayFinance.totalProfitDistributed.toStringAsFixed(2)} টাকা", style: const TextStyle(fontSize: 14, color: Colors.purple, fontWeight: FontWeight.bold)),
+                  Text("• নিট বণ্টনযোগ্য মুনাফা (চলমান): ${SamobayFinance.currentNetProfit.toStringAsFixed(2)} টাকা", style: const TextStyle(fontSize: 14, color: Colors.blue, fontWeight: FontWeight.bold)),
                   Text("• মোট বকেয়া (ডিউ): $totalDue টাকা", style: const TextStyle(fontSize: 14, color: Colors.red, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 10),
                   Row(
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(foregroundColor: Colors.teal),
+                          style: OutlinedButton.styleFrom(foregroundColor: Colors.teal, padding: const EdgeInsets.symmetric(horizontal: 4)),
                           onPressed: _showManageBusinessRecordsDialog,
-                          icon: const Icon(Icons.receipt_long, size: 16),
-                          label: const Text("লাভ/ক্ষতি খতিয়ান", style: TextStyle(fontSize: 11)),
+                          icon: const Icon(Icons.receipt_long, size: 15),
+                          label: const Text("খতিয়ান", style: TextStyle(fontSize: 11)),
                         ),
                       ),
                       const SizedBox(width: 4),
                       Expanded(
                         child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(foregroundColor: Colors.indigo),
+                          style: OutlinedButton.styleFrom(foregroundColor: Colors.indigo, padding: const EdgeInsets.symmetric(horizontal: 4)),
                           onPressed: _showAllMembersReportDialog,
-                          icon: const Icon(Icons.people, size: 16),
-                          label: const Text("সকলের স্টেটমেন্ট", style: TextStyle(fontSize: 11)),
+                          icon: const Icon(Icons.people, size: 15),
+                          label: const Text("স্টেটমেন্ট", style: TextStyle(fontSize: 11)),
                         ),
                       ),
                       const SizedBox(width: 4),
                       Expanded(
                         child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade700, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 2)),
-                          onPressed: _distributeNetProfit,
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade700, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 4)),
+                          onPressed: _showProfitDistributionDialog,
                           icon: const Icon(Icons.calculate, size: 14),
                           label: const Text("অটো লাভ", style: TextStyle(fontSize: 11)),
                         ),
                       ),
+                      if (lastDistributionBatchId != null) ...[
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 4)),
+                            onPressed: _showReverseProfitDialog,
+                            icon: const Icon(Icons.undo, size: 14),
+                            label: const Text("রিভার্স", style: TextStyle(fontSize: 11)),
+                          ),
+                        ),
+                      ],
                     ],
                   )
                 ],
