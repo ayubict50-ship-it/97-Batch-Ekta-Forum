@@ -24,3 +24,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+fonts:
+    - family: SolaimanLipi
+      fonts:
+        - asset: assets/fonts/SolaimanLipi.ttf
