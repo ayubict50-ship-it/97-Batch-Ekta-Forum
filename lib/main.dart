@@ -142,6 +142,8 @@ class TransactionHistory {
   final bool isProfit;
   final String? batchId;
 
+  final String status; // 'pending' বা 'approved'
+
   TransactionHistory({
     required this.date,
     required this.amount,
@@ -149,6 +151,7 @@ class TransactionHistory {
     this.trxId = '',
     this.isProfit = false,
     this.batchId,
+    this.status = 'approved', // পুরোনো বা সরাসরি ক্যাশ জমার ক্ষেত্রে বাই ডিফল্ট অ্যাপ্রুভড থাকবে
   });
 
   Map<String, dynamic> toJson() => {
@@ -158,6 +161,7 @@ class TransactionHistory {
         'trxId': trxId,
         'isProfit': isProfit,
         'batchId': batchId,
+    'status': status,
       };
 
   factory TransactionHistory.fromJson(Map<String, dynamic> json) => TransactionHistory(
@@ -167,6 +171,7 @@ class TransactionHistory {
         trxId: json['trxId'] ?? '',
         isProfit: json['isProfit'] ?? false,
         batchId: json['batchId'],
+    status: json['status'] ?? 'approved',
       );
 }
 
@@ -2424,14 +2429,14 @@ class _MemberDashboardState extends State<MemberDashboard> {
                 onPressed: () async {
                   double? amount = double.tryParse(_amountController.text.trim());
                   if (amount != null && amount > 0 && _trxController.text.isNotEmpty) {
-                    setState(() {
-                      widget.member.deposit += amount;
+                  setState(() {
                       widget.member.transactions.add(
                         TransactionHistory(
                           date: DateTime.now(),
                           amount: amount,
                           paymentMethod: _selectedMethod == 'bKash' ? 'bKash Send Money' : 'সোনালী ব্যাংক',
                           trxId: _trxController.text.trim(),
+                          status: 'pending', // <--- এটি TransactionHistory এর ভেতরে এভাবে বসবে
                         ),
                       );
                     });
@@ -2439,7 +2444,7 @@ class _MemberDashboardState extends State<MemberDashboard> {
                     if (mounted) {
                       Navigator.pop(ctx);
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text("৳$amount টাকা সঞ্চয় জমা হিসেবে রেকর্ড ও ক্লাউডে সেভ হয়েছে!")),
+                  SnackBar(content: Text("আপনার পেমেন্টটি সফলভাবে সাবমিট হয়েছে। এডমিন অনুমোদন করার পর এটি আপনার অ্যাকাউন্টে যোগ হবে!")),
                       );
                     }
                   }
