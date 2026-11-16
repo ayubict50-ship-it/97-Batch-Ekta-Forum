@@ -9,7 +9,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:open_file/open_file.dart';
-
+import 'package:printing/printing.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
