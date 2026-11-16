@@ -603,7 +603,7 @@ void _showPendingApprovalsDialog() {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) {
-          List> pendingList = [];
+       var pendingList = [];
           for (var member in globalMembers) {
             for (var tx in member.transactions) {
               if (tx.status == 'pending') {
