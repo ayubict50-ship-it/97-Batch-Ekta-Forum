@@ -337,9 +337,8 @@ Future<void> saveReportToFile(BuildContext context, String fileName, String cont
   try {
     final pdf = pw.Document();
 
-    // ফন্ট লোড করা হচ্ছে
-    final fontData = await rootBundle.load('assets/fonts/SolaimanLipi.ttf');
-    final ttf = pw.Font.ttf(fontData);
+    // সরাসরি অনলাইন থেকে নিখুঁত বাংলা ফন্ট লোড করার কোড
+    final ttf = await PdfGoogleFonts.hindSiliguriRegular();
 
     pdf.addPage(
       pw.Page(
@@ -348,16 +347,16 @@ Future<void> saveReportToFile(BuildContext context, String fileName, String cont
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Text(
-                globalSocietyName, 
+                globalSocietyName,
                 style: pw.TextStyle(
                   font: ttf,
-                  fontSize: 20, 
+                  fontSize: 20,
                   fontWeight: pw.FontWeight.bold,
                 ),
               ),
               pw.SizedBox(height: 10),
               pw.Text(
-                content, 
+                content,
                 style: pw.TextStyle(
                   font: ttf,
                   fontSize: 12,
@@ -379,13 +378,13 @@ Future<void> saveReportToFile(BuildContext context, String fileName, String cont
       directory = await getApplicationDocumentsDirectory();
     }
 
-    final String actualFileName = fileName.endsWith('.pdf') ? fileName : '${fileName.replaceAll(RegExp(r'\..+$'), '')}.pdf';
+    final String actualFileName = fileName.endsWith('.pdf') ? fileName : '${fileName.replaceAll(RegExp(r'\.+$'), '')}.pdf';
     final File file = File('${directory?.path}/$actualFileName');
     await file.writeAsBytes(await pdf.save());
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("PDF ফাইল ডাউনলোড ফোল্ডারে সেভ হয়েছে:\n${file.path}")),
+        SnackBar(content: Text('PDF ফাইল ডাউনলোড ফোল্ডারে সেভ হয়েছে:\n${file.path}')),
       );
     }
 
@@ -394,12 +393,11 @@ Future<void> saveReportToFile(BuildContext context, String fileName, String cont
     debugPrint("PDF Save Error: $e");
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("PDF সেভ করতে সমস্যা হয়েছে: $e")),
+        SnackBar(content: Text('PDF সেভ করতে সমস্যা হয়েছে: $e')),
       );
     }
   }
 }
-
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
