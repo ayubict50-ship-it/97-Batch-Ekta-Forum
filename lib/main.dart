@@ -598,7 +598,117 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
 
   double get totalDue =>
       globalMembers.fold(0.0, (sum, item) => sum + item.dueAmount);
+void _showPendingApprovalsDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          List> pendingList = [];
+          for (var member in globalMembers) {
+            for (var tx in member.transactions) {
+              if (tx.status == 'pending') {
+                pendingList.add({
+                  'member': member,
+                  'tx': tx,
+                });
+              }
+            }
+          }
 
+          return AlertDialog(
+            title: const Text("⏳ অনুমোদনের অপেক্ষায় থাকা জমা"),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: pendingList.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.all(20.0),
+                      child: Text("বর্তমানে কোনো পেন্ডিং জমা নেই।", textAlign: TextAlign.center),
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: pendingList.length,
+                      itemBuilder: (context, index) {
+                        var item = pendingList[index];
+                        Member member = item['member'];
+                        TransactionHistory tx = item['tx'];
+
+                        return Card(
+                          color: Colors.orange.shade50,
+                          margin: const EdgeInsets.symmetric(vertical: 6),
+                          child: Padding(
+                            padding: const EdgeInsets.all(10.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text("সদস্য: ${member.name} (ID: ${member.id})", style: const TextStyle(fontWeight: FontWeight.bold)),
+                                Text("জমার পরিমাণ: ৳${tx.amount.toStringAsFixed(2)}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                                Text("মাধ্যম: ${tx.paymentMethod} | TrxID: ${tx.trxId}"),
+                                Text("তারিখ: ${tx.date.day}/${tx.date.month}/${tx.date.year}"),
+                                const SizedBox(height: 8),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    TextButton.icon(
+                                      style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                      onPressed: () async {
+                                        setState(() {
+                                          member.transactions.remove(tx);
+                                        });
+                                        await CloudDatabaseService.syncAllDataToCloud();
+                                        setDialogState(() {});
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text("পেমেন্টটি বাতিল করা হয়েছে!")),
+                                        );
+                                      },
+                                      icon: const Icon(Icons.close, size: 16),
+                                      label: const Text("বাতিল"),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                                      onPressed: () async {
+                                        setState(() {
+                                          member.deposit += tx.amount;
+                                          var targetTx = member.transactions.firstWhere((t) => t == tx);
+                                          int txIndex = member.transactions.indexOf(targetTx);
+                                          member.transactions[txIndex] = TransactionHistory(
+                                            date: tx.date,
+                                            amount: tx.amount,
+                                            paymentMethod: tx.paymentMethod,
+                                            trxId: tx.trxId,
+                                            isProfit: tx.isProfit,
+                                            batchId: tx.batchId,
+                                            status: 'approved',
+                                          );
+                                        });
+                                        await CloudDatabaseService.syncAllDataToCloud();
+                                        setDialogState(() {});
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text("${member.name}-এর ৳${tx.amount} জমা সফলভাবে অনুমোদিত হয়েছে!")),
+                                          );
+                                        }
+                                      },
+                                      icon: const Icon(Icons.check, size: 16),
+                                      label: const Text("অনুমোদন দিন"),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বন্ধ করুন")),
+            ],
+          );
+        },
+      ),
+    );
+  }
   void _showChangeAdminCredentialsDialog() {
     final adminIdController = TextEditingController(text: globalAdminId);
     final adminPassController = TextEditingController(text: globalAdminPassword);
