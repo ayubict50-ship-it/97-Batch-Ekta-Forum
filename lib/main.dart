@@ -2143,6 +2143,11 @@ void _showPendingApprovalsDialog() {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
+            icon: const Icon(Icons.pending_actions),
+            tooltip: "পেন্ডিং জমা অনুমোদন",
+            onPressed: _showPendingApprovalsDialog,
+          ),
+          IconButton(
             icon: const Icon(Icons.settings),
             tooltip: "সমিতির সেটিংস",
             onPressed: _showSocietySettingsDialog,
