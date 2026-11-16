@@ -368,12 +368,9 @@ Future<void> saveReportToFile(BuildContext context, String fileName, String cont
       ),
     );
 
-    Directory? directory;
+  Directory? directory;
     if (Platform.isAndroid) {
-      directory = Directory('/storage/emulated/0/Download');
-      if (!await directory.exists()) {
-        directory = await getExternalStorageDirectory();
-      }
+      directory = await getExternalStorageDirectory() ?? await getApplicationDocumentsDirectory();
     } else {
       directory = await getApplicationDocumentsDirectory();
     }
