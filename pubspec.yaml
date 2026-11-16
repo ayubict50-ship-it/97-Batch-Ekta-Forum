@@ -16,7 +16,6 @@ dependencies:
   cloud_firestore: ^5.4.4
   firebase_crashlytics: ^4.3.10
   pdf: ^3.10.4
-  bangla_pdf: ^1.9.2
   open_file: ^3.3.2
   printing: ^5.11.1
 dev_dependencies:
