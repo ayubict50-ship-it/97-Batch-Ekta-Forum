@@ -614,123 +614,55 @@ void _showPendingApprovalsDialog() {
               }
             }
           }
-// ১. লাভ পোস্টিং বা ব্যবসার রেকর্ড এডিট করার ফাংশন
-  void _showEditBusinessRecordDialog(BusinessRecord record) {
-    final amountController = TextEditingController(text: record.amount.toString());
-    final titleController = TextEditingController(text: record.title);
 
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("✏️ ব্যবসার রেকর্ড এডিট করুন"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: amountController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: "টাকার পরিমাণ"),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: titleController,
-              decoration: const InputDecoration(labelText: "শিরোনাম / বিবরণ"),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-            onPressed: () async {
-              setState(() {
-                final newAmount = double.tryParse(amountController.text) ?? record.amount;
-                final newTitle = titleController.text;
-                
-                int index = globalBusinessRecords.indexWhere((r) => r.id == record.id);
-                if (index != -1) {
-                  globalBusinessRecords[index] = BusinessRecord(
-                    id: record.id,
-                    title: newTitle,
-                    amount: newAmount,
-                    isIncome: record.isIncome,
-                    date: record.date,
-                    isSettled: record.isSettled,
-                    batchId: record.batchId,
-                  );
-                }
-              });
-              await CloudDatabaseService.syncAllDataToCloud();
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("রেকর্ড সফলভাবে আপডেট করা হয়েছে!")),
-              );
-            },
-            child: const Text("সংরক্ষণ করুন"),
-          ),
-        ],
-      ),
-    );
-  }
+          return AlertDialog(
+            title: const Text("⏳ অনুমোদনের অপেক্ষায় থাকা জমা"),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: pendingList.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.all(20.0),
+                      child: Text("বর্তমানে কোনো পেন্ডিং জমা নেই।", textAlign: TextAlign.center),
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: pendingList.length,
+                      itemBuilder: (context, index) {
+                        var item = pendingList[index];
+                        Member member = item['member'];
+                        TransactionHistory tx = item['tx'];
 
-  // ২. সদস্যের জমা বা বকেয়া এডিট করার ফাংশন
-  void _showEditMemberFinancialsDialog(Member member) {
-    final depositController = TextEditingController(text: member.deposit.toString());
-    final dueController = TextEditingController(text: member.dueAmount.toString());
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text("✏️ ${member.name}-এর হিসাব এডিট"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: depositController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: "সঞ্চয় / ব্যালেন্স (টাকা)"),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: dueController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: "বকেয়া / ডিউ (টাকা)"),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-            onPressed: () async {
-              setState(() {
-                final newDeposit = double.tryParse(depositController.text) ?? member.deposit;
-                final newDue = double.tryParse(dueController.text) ?? member.dueAmount;
-
-                int index = globalMembers.indexWhere((m) => m.id == member.id);
-                if (index != -1) {
-                  globalMembers[index] = Member(
-                    id: member.id,
-                    name: member.name,
-                    phone: member.phone,
-                    deposit: newDeposit,
-                    dueAmount: newDue,
-                    batchId: member.batchId,
-                  );
-                }
-              });
-              await CloudDatabaseService.syncAllDataToCloud();
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text("${member.name}-এর হিসাব আপডেট করা হয়েছে!")),
-              );
-            },
-            child: const Text("আপডেট করুন"),
-          ),
-        ],
-      ),
-    );
-  }
+                        return Card(
+                          color: Colors.orange.shade50,
+                          margin: const EdgeInsets.symmetric(vertical: 6),
+                          child: Padding(
+                            padding: const EdgeInsets.all(10.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text("সদস্য: ${member.name} (ID: ${member.id})", style: const TextStyle(fontWeight: FontWeight.bold)),
+                                Text("জমার পরিমাণ: ৳${tx.amount.toStringAsFixed(2)}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                                Text("মাধ্যম: ${tx.paymentMethod} | TrxID: ${tx.trxId}"),
+                                Text("তারিখ: ${tx.date.day}/${tx.date.month}/${tx.date.year}"),
+                                const SizedBox(height: 8),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    TextButton.icon(
+                                      style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                      onPressed: () async {
+                                        setState(() {
+                                          member.transactions.remove(tx);
+                                        });
+                                        await CloudDatabaseService.syncAllDataToCloud();
+                                        setDialogState(() {});
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text("পেমেন্টটি বাতিল করা হয়েছে!")),
+                                        );
+                                      },
+                                      icon: const Icon(Icons.close, size: 16),
+                                      label: const Text("বাতিল"),
+                                    ),
                                     const SizedBox(width: 8),
                                     ElevatedButton.icon(
                                       style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
