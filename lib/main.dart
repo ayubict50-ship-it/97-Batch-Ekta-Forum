@@ -1489,7 +1489,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     double netP = SamobayFinance.currentNetProfit;
 
     if (netP <= 0 || globalMembers.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.on(context).showSnackBar(
         const SnackBar(content: Text("বণ্টন করার মতো পর্যাপ্ত চলমান নিট লাভ বা সদস্য নেই!")),
       );
       return;
@@ -1498,14 +1498,14 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text("📅 মূল জমা অনুযায়ী লাভ বণ্টন"),
+        title: const Text("📅 জমাকৃত টাকার মেয়াদ ও তারিখ অনুযায়ী লাভ বণ্টন"),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text("বণ্টনযোগ্য নিট লাভ: ৳${netP.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 16)),
             const SizedBox(height: 10),
-            const Text("সদস্যদের বর্তমান মোট সঞ্চয় বা জমার অনুপাত অনুযায়ী পুরো লাভের টাকাটি ১০০% নিখুঁতভাবে বন্টিত হবে।", style: TextStyle(fontSize: 13, color: Colors.grey)),
+            const Text("সদস্যদের জমাকৃত টাকার পরিমাণ এবং তা কত দিন বা তারিখ পর্যন্ত ইনভেস্ট ছিল (Time-Weighted Capital-Days), তার অনুপাতে পুরো লাভের টাকাটি ১০০% নিখুঁতভাবে বন্টিত হবে। কোনো টাকা অবন্টিত থাকবে না।", style: TextStyle(fontSize: 13, color: Colors.grey)),
           ],
         ),
         actions: [
@@ -1514,7 +1514,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade800, foregroundColor: Colors.white),
             onPressed: () {
               Navigator.pop(ctx);
-              _executeDepositRatioProfitDistribution(netP);
+              _executeTimeWeightedProfitDistribution(netP);
             },
             child: const Text("নিশ্চিত বণ্টন করুন"),
           ),
@@ -1523,11 +1523,48 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     );
   }
 
-  void _executeDepositRatioProfitDistribution(double netP) async {
-    double totalDep = totalCollection;
-    if (totalDep <= 0) {
+  // টাইম-ওয়েইটেড (তারিখ ও মেয়াদভিত্তিক) ১০০% নিখুঁত লাভ বণ্টন লজিক
+  void _executeTimeWeightedProfitDistribution(double netP) async {
+    if (globalMembers.isEmpty) return;
+
+    DateTime now = DateTime.now();
+    List> memberWeights = [];
+    double totalWeight = 0.0;
+
+    // প্রতিটি সদস্যের জন্য (মূলধন × দিন/মেয়াদ) বা ক্যাপিটাল-ডেস ওয়েট হিসাব করা
+    for (var member in globalMembers) {
+      double memberEffectiveScore = 0.0;
+
+      if (member.transactions.isEmpty) {
+        // যদি কোনো লেনদেন না থাকে, জয়েনিং ডেট থেকে হিসাব
+        int days = now.difference(member.joinDate).inDays;
+        if (days < 1) days = 1;
+        memberEffectiveScore = member.deposit * days;
+      } else {
+        // প্রতিটি লেনদেনের নিজস্ব তারিখ থেকে বর্তমান সময় পর্যন্ত দিনের হিসাব
+        for (var tx in member.transactions) {
+          if (!tx.isProfit) {
+            int days = now.difference(tx.date).inDays;
+            if (days < 1) days = 1;
+            memberEffectiveScore += (tx.amount * days);
+          }
+        }
+      }
+
+      if (memberEffectiveScore <= 0) {
+        memberEffectiveScore = member.deposit > 0 ? member.deposit * 30 : 1.0;
+      }
+
+      totalWeight += memberEffectiveScore;
+      memberWeights.add({
+        'member': member,
+        'weight': memberEffectiveScore,
+      });
+    }
+
+    if (totalWeight <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("সদস্যদের মোট জমা শূন্য, তাই লাভ বণ্টন করা সম্ভব নয়!")),
+        const SnackBar(content: Text("বণ্টন করার মতো উপযুক্ত ওয়েট বা জমা পাওয়া যায়নি!")),
       );
       return;
     }
@@ -1536,15 +1573,17 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
 
     setState(() {
       double distributedSum = 0.0;
-      for (int i = 0; i < globalMembers.length; i++) {
-        var member = globalMembers[i];
+      for (int i = 0; i < memberWeights.length; i++) {
+        var item = memberWeights[i];
+        Member member = item['member'];
+        double weight = item['weight'];
+
         double memberProfit = 0.0;
-        
-        // শেষ সদস্যের বেলায় নিখুঁত হিসাব মেলানোর জন্য বাকি সমস্ত টাকা অ্যাড করে দেওয়া হবে, ১ পয়সাও মিস হবে না
-        if (i == globalMembers.length - 1) {
+        // শেষ সদস্যের বেলায় অবশিষ্টাংশ বা দশমিকের সামান্য এদিক-সেদিক পুরোপুরি অ্যাড করে দেওয়া হবে, যাতে মোট লাভের ১ টাকা বা ১ পয়সাও মিস না হয়!
+        if (i == memberWeights.length - 1) {
           memberProfit = double.parse((netP - distributedSum).toStringAsFixed(2));
         } else {
-          memberProfit = double.parse(((netP * member.deposit) / totalDep).toStringAsFixed(2));
+          memberProfit = double.parse(((netP * weight) / totalWeight).toStringAsFixed(2));
           distributedSum += memberProfit;
         }
 
@@ -1554,7 +1593,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
             TransactionHistory(
               date: DateTime.now(),
               amount: memberProfit,
-              paymentMethod: 'লাভ বণ্টন (জমার অনুপাত অনুযায়ী)',
+              paymentMethod: 'লাভ বণ্টন (তারিখ ও মেয়াদ অনুযায়ী)',
               isProfit: true,
               batchId: newBatchId,
             ),
@@ -1576,7 +1615,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("৳${netP.toStringAsFixed(2)} লাভ সদস্যদের জমার অনুপাতে ১০০% নিখুঁতভাবে বন্টিত হয়েছে!")),
+        SnackBar(content: Text("৳${netP.toStringAsFixed(2)} লাভ সদস্যদের তারিখ ও মেয়াদ অনুযায়ী ১০০% নিখুঁতভাবে বন্টিত হয়েছে!")),
       );
     }
   }
@@ -2783,7 +2822,7 @@ class _MemberDashboardState extends State<MemberDashboard> {
                 ),
                 onPressed: () async {
                   String memberText = "=== [$globalSocietyName] সদস্য স্টেটমেন্ট ===\n\n";
-                  memberText += "নাম: ${widget.member.name} (ID: ${widget.member.id})\n";
+                  memberText += "Nest: ${widget.member.name} (ID: ${widget.member.id})\n";
                   memberText += "মোবাইল: ${widget.member.mobile}\n";
                   memberText += "মূল জমা: ৳${widget.member.deposit}\n";
                   memberText += "অর্জিত লাভ: ৳${widget.member.profitEarned}\n";
