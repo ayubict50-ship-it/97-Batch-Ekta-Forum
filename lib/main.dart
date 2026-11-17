@@ -11,6 +11,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:open_file/open_file.dart';
 import 'package:printing/printing.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -141,8 +142,7 @@ class TransactionHistory {
   final String trxId;
   final bool isProfit;
   final String? batchId;
-
-  final String status; // 'pending' বা 'approved'
+  final String status;
 
   TransactionHistory({
     required this.date,
@@ -151,7 +151,7 @@ class TransactionHistory {
     this.trxId = '',
     this.isProfit = false,
     this.batchId,
-    this.status = 'approved', // পুরোনো বা সরাসরি ক্যাশ জমার ক্ষেত্রে বাই ডিফল্ট অ্যাপ্রুভড থাকবে
+    this.status = 'approved',
   });
 
   Map<String, dynamic> toJson() => {
@@ -161,7 +161,7 @@ class TransactionHistory {
         'trxId': trxId,
         'isProfit': isProfit,
         'batchId': batchId,
-    'status': status,
+        'status': status,
       };
 
   factory TransactionHistory.fromJson(Map<String, dynamic> json) => TransactionHistory(
@@ -171,7 +171,7 @@ class TransactionHistory {
         trxId: json['trxId'] ?? '',
         isProfit: json['isProfit'] ?? false,
         batchId: json['batchId'],
-    status: json['status'] ?? 'approved',
+        status: json['status'] ?? 'approved',
       );
 }
 
@@ -342,8 +342,6 @@ class SamobayFinance {
 Future<void> saveReportToFile(BuildContext context, String fileName, String content) async {
   try {
     final pdf = pw.Document();
-
-    // সরাসরি অনলাইন থেকে নিখুঁত বাংলা ফন্ট লোড করার কোড
     final ttf = await PdfGoogleFonts.hindSiliguriRegular();
 
     pdf.addPage(
@@ -374,7 +372,7 @@ Future<void> saveReportToFile(BuildContext context, String fileName, String cont
       ),
     );
 
-  Directory? directory;
+    Directory? directory;
     if (Platform.isAndroid) {
       directory = await getExternalStorageDirectory() ?? await getApplicationDocumentsDirectory();
     } else {
@@ -401,6 +399,7 @@ Future<void> saveReportToFile(BuildContext context, String fileName, String cont
     }
   }
 }
+
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -598,12 +597,133 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
 
   double get totalDue =>
       globalMembers.fold(0.0, (sum, item) => sum + item.dueAmount);
-void _showPendingApprovalsDialog() {
+
+  // ১. লাভ পোস্টিং বা ব্যবসার রেকর্ড এডিট করার ফাংশন
+  void _showEditBusinessRecordDialog(BusinessRecord record) {
+    final amountController = TextEditingController(text: record.amount.toString());
+    final titleController = TextEditingController(text: record.title);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("✏️ ব্যবসার রেকর্ড এডিট করুন"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: amountController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: "টাকার পরিমাণ"),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: titleController,
+              decoration: const InputDecoration(labelText: "শিরোনাম / বিবরণ"),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+            onPressed: () async {
+              setState(() {
+                final newAmount = double.tryParse(amountController.text) ?? record.amount;
+                final newTitle = titleController.text;
+                
+                int index = globalBusinessRecords.indexWhere((r) => r.id == record.id);
+                if (index != -1) {
+                  globalBusinessRecords[index] = BusinessRecord(
+                    id: record.id,
+                    title: newTitle,
+                    amount: newAmount,
+                    isIncome: record.isIncome,
+                    date: record.date,
+                    isSettled: record.isSettled,
+                    batchId: record.batchId,
+                  );
+                }
+              });
+              await CloudDatabaseService.syncAllDataToCloud();
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("রেকর্ড সফলভাবে আপডেট করা হয়েছে!")),
+              );
+            },
+            child: const Text("সংরক্ষণ করুন"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ২. সদস্যের জমা বা বকেয়া এডিট করার ফাংশন
+  void _showEditMemberFinancialsDialog(Member member) {
+    final depositController = TextEditingController(text: member.deposit.toString());
+    final dueController = TextEditingController(text: member.dueAmount.toString());
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text("✏️ ${member.name}-এর হিসাব এডিট"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: depositController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: "সঞ্চয় / ব্যালেন্স (টাকা)"),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: dueController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: "বকেয়া / ডিউ (টাকা)"),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+            onPressed: () async {
+              setState(() {
+                final newDeposit = double.tryParse(depositController.text) ?? member.deposit;
+                final newDue = double.tryParse(dueController.text) ?? member.dueAmount;
+
+                int index = globalMembers.indexWhere((m) => m.id == member.id);
+                if (index != -1) {
+                  globalMembers[index] = Member(
+                    id: member.id,
+                    name: member.name,
+                    mobile: member.mobile,
+                    pin: member.pin,
+                    deposit: newDeposit,
+                    profitEarned: member.profitEarned,
+                    joinDate: member.joinDate,
+                    transactions: member.transactions,
+                  );
+                }
+              });
+              await CloudDatabaseService.syncAllDataToCloud();
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text("${member.name}-এর হিসাব আপডেট করা হয়েছে!")),
+              );
+            },
+            child: const Text("আপডেট করুন"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showPendingApprovalsDialog() {
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) {
-       var pendingList = [];
+          var pendingList = [];
           for (var member in globalMembers) {
             for (var tx in member.transactions) {
               if (tx.status == 'pending') {
@@ -709,6 +829,7 @@ void _showPendingApprovalsDialog() {
       ),
     );
   }
+
   void _showChangeAdminCredentialsDialog() {
     final adminIdController = TextEditingController(text: globalAdminId);
     final adminPassController = TextEditingController(text: globalAdminPassword);
@@ -1257,6 +1378,13 @@ void _showPendingApprovalsDialog() {
                                           ),
                                           const SizedBox(width: 6),
                                           IconButton(
+                                            icon: const Icon(Icons.edit, color: Colors.teal, size: 20),
+                                            onPressed: () {
+                                              _showEditBusinessRecordDialog(record);
+                                            },
+                                            tooltip: "রেকর্ড এডিট করুন",
+                                          ),
+                                          IconButton(
                                             icon: const Icon(Icons.delete, color: Colors.red, size: 20),
                                             onPressed: () async {
                                               setState(() {
@@ -1565,7 +1693,7 @@ void _showPendingApprovalsDialog() {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("⚠️ সদস্য ডিলিট নিশ্চিতকরণ"),
-        content: Text("আপনি কি নিশ্চিত যে '${member.name}' (ID: ${member.id})-কে সমিতির তালিকা থেকে স্থায়ীভাবে মুছে ফেলতে চান? তাঁর সমস্ত জমা ও লেনদেনের হিসাব মুছে যাবে।"),
+        content: Text("আপনি কি নিশ্চিত যে '${member.name}' (ID: ${member.id})-কে সমিতির তালিকা থেকে স্থায়ীভাবে মুছে ফেলতে চান? সমস্ত জমা ও লেনদেনের হিসাব মুছে যাবে।"),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
           ElevatedButton(
@@ -1778,7 +1906,6 @@ void _showPendingApprovalsDialog() {
   void _showEditMemberDialog(Member member) {
     final nameController = TextEditingController(text: member.name);
     final mobileController = TextEditingController(text: member.mobile);
-    final depositController = TextEditingController(text: member.deposit.toString());
 
     showDialog(
       context: context,
@@ -1790,8 +1917,6 @@ void _showPendingApprovalsDialog() {
             TextField(controller: nameController, decoration: const InputDecoration(labelText: "নাম")),
             const SizedBox(height: 10),
             TextField(controller: mobileController, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: "মোবাইল নম্বর")),
-            const SizedBox(height: 10),
-            TextField(controller: depositController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "মোট জমা সংশোধন")),
           ],
         ),
         actions: [
@@ -1801,7 +1926,6 @@ void _showPendingApprovalsDialog() {
               setState(() {
                 member.name = nameController.text.trim();
                 member.mobile = mobileController.text.trim();
-                member.deposit = double.tryParse(depositController.text) ?? member.deposit;
               });
               await CloudDatabaseService.syncAllDataToCloud();
               if (mounted) {
@@ -1957,6 +2081,14 @@ void _showPendingApprovalsDialog() {
                 onTap: () {
                   Navigator.pop(ctx);
                   _showEditMemberDialog(member);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.calculate, color: Colors.indigo),
+                title: const Text("হিসাব/ব্যালেন্স ও ডিউ এডিট করুন"),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showEditMemberFinancialsDialog(member);
                 },
               ),
               ListTile(
@@ -2544,14 +2676,14 @@ class _MemberDashboardState extends State<MemberDashboard> {
                 onPressed: () async {
                   double? amount = double.tryParse(_amountController.text.trim());
                   if (amount != null && amount > 0 && _trxController.text.isNotEmpty) {
-                  setState(() {
+                    setState(() {
                       widget.member.transactions.add(
                         TransactionHistory(
                           date: DateTime.now(),
                           amount: amount,
                           paymentMethod: _selectedMethod == 'bKash' ? 'bKash Send Money' : 'সোনালী ব্যাংক',
                           trxId: _trxController.text.trim(),
-                          status: 'pending', // <--- এটি TransactionHistory এর ভেতরে এভাবে বসবে
+                          status: 'pending',
                         ),
                       );
                     });
@@ -2559,7 +2691,7 @@ class _MemberDashboardState extends State<MemberDashboard> {
                     if (mounted) {
                       Navigator.pop(ctx);
                       ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("আপনার পেমেন্টটি সফলভাবে সাবমিট হয়েছে। এডমিন অনুমোদন করার পর এটি আপনার অ্যাকাউন্টে যোগ হবে!")),
+                        const SnackBar(content: Text("আপনার পেমেন্টটি সফলভাবে সাবমিট হয়েছে। এডমিন অনুমোদন করার পর এটি আপনার অ্যাকাউন্টে যোগ হবে!")),
                       );
                     }
                   }
