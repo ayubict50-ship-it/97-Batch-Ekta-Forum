@@ -1489,7 +1489,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     double netP = SamobayFinance.currentNetProfit;
 
     if (netP <= 0 || globalMembers.isEmpty) {
-      ScaffoldMessenger.on(context).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("বণ্টন করার মতো পর্যাপ্ত চলমান নিট লাভ বা সদস্য নেই!")),
       );
       return;
@@ -1531,17 +1531,14 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     List> memberWeights = [];
     double totalWeight = 0.0;
 
-    // প্রতিটি সদস্যের জন্য (মূলধন × দিন/মেয়াদ) বা ক্যাপিটাল-ডেস ওয়েট হিসাব করা
     for (var member in globalMembers) {
       double memberEffectiveScore = 0.0;
 
       if (member.transactions.isEmpty) {
-        // যদি কোনো লেনদেন না থাকে, জয়েনিং ডেট থেকে হিসাব
         int days = now.difference(member.joinDate).inDays;
         if (days < 1) days = 1;
         memberEffectiveScore = member.deposit * days;
       } else {
-        // প্রতিটি লেনদেনের নিজস্ব তারিখ থেকে বর্তমান সময় পর্যন্ত দিনের হিসাব
         for (var tx in member.transactions) {
           if (!tx.isProfit) {
             int days = now.difference(tx.date).inDays;
@@ -1579,7 +1576,6 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         double weight = item['weight'];
 
         double memberProfit = 0.0;
-        // শেষ সদস্যের বেলায় অবশিষ্টাংশ বা দশমিকের সামান্য এদিক-সেদিক পুরোপুরি অ্যাড করে দেওয়া হবে, যাতে মোট লাভের ১ টাকা বা ১ পয়সাও মিস না হয়!
         if (i == memberWeights.length - 1) {
           memberProfit = double.parse((netP - distributedSum).toStringAsFixed(2));
         } else {
@@ -2037,13 +2033,15 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
             onPressed: () async {
               Navigator.pop(ctx);
               String statementText = "=== [$globalSocietyName] সদস্য স্টেটমেন্ট ===\n\n";
-              statementText += "সদস্যের নাম: ${member.name}\nID: ${member.id} | মোবাইল: ${member.mobile}\n";
-              statementText += "মূল জমা: ৳${member.deposit}\nঅর্জিত লাভ: ৳${member.profitEarned}\nসর্বমোট ব্যালেন্স: ৳${member.totalBalance}\n";
-              statementText += "বকেয়া/অগ্রিম: ${member.dueAmount > 0 ? 'বকেয়া ৳${member.dueAmount}' : 'অগ্রিম ৳${member.advanceAmount}'}\n\nলেনদেনের ইতিহাস:\n";
+              statementText += "নাম: ${member.name} (ID: ${member.id})\n";
+              statementText += "মোবাইল: ${member.mobile}\n";
+              statementText += "মূল জমা: ৳${member.deposit}\n";
+              statementText += "অর্জিত লাভ: ৳${member.profitEarned}\n";
+              statementText += "সর্বমোট ব্যালেন্স: ৳${member.totalBalance}\n\nলেনদেনসমূহ:\n";
               for (var t in member.transactions) {
                 statementText += "- ${t.date.day}/${t.date.month}/${t.date.year}: ৳${t.amount} (${t.paymentMethod})\n";
               }
-              await saveReportToFile(context, "Member_${member.name}_Statement.pdf", statementText);
+              await saveReportToFile(context, "${member.name}_Statement.pdf", statementText);
             },
             icon: const Icon(Icons.download, size: 16),
             label: const Text("ফাইল ডাউনলোড (PDF)"),
@@ -2822,7 +2820,7 @@ class _MemberDashboardState extends State<MemberDashboard> {
                 ),
                 onPressed: () async {
                   String memberText = "=== [$globalSocietyName] সদস্য স্টেটমেন্ট ===\n\n";
-                  memberText += "Nest: ${widget.member.name} (ID: ${widget.member.id})\n";
+                  memberText += "নাম: ${widget.member.name} (ID: ${widget.member.id})\n";
                   memberText += "মোবাইল: ${widget.member.mobile}\n";
                   memberText += "মূল জমা: ৳${widget.member.deposit}\n";
                   memberText += "অর্জিত লাভ: ৳${widget.member.profitEarned}\n";
