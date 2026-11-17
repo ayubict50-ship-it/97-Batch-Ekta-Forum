@@ -650,9 +650,8 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     );
   }
 
-  // ২. সদস্যের অ্যাকাউন্টে বন্টনকৃত লাভ (Distributed Profit) এডিট বা সংশোধন করার ফাংশন
+  // ২. সদস্যের অ্যাকাউন্টে বন্টনকৃত লাভ (Distributed Profit) এডিট করার ফাংশন
   void _showEditDistributedProfitDialog(Member member) {
-    // সদস্যের লেনদেন থেকে শুধু লাভ (isProfit == true) এন্ট্রিগুলো ফিল্টার করা
     var profitTxs = member.transactions.where((t) => t.isProfit).toList();
 
     showDialog(
@@ -729,11 +728,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                   double oldAmt = tx.amount;
                   double diff = newAmt - oldAmt;
 
-                  // মোট লাভ থেকে ডিফারেন্স মাইনাস/প্লাস করা
                   member.profitEarned += diff;
                   if (member.profitEarned < 0) member.profitEarned = 0.0;
 
-                  // ট্রানজেকশন লিস্টে লাভের পরিমাণ আপডেট করা
                   int txIndex = member.transactions.indexOf(tx);
                   if (txIndex != -1) {
                     member.transactions[txIndex] = TransactionHistory(
@@ -1498,140 +1495,58 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       return;
     }
 
-    DateTime periodStart = DateTime(DateTime.now().year, 1, 1);
-    DateTime periodEnd = DateTime.now();
-
     showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            title: const Text("📅 তারিখ ও মূলধন অনুযায়ী লাভ বণ্টন"),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("বণ্টনযোগ্য নিট লাভ: ৳${netP.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 16)),
-                  const SizedBox(height: 10),
-                  const Text("সদস্যদের কিস্তি জমার তারিখ অনুযায়ী (টাকা × দিন) অনুপাতে এই লাভ ভাগ হবে।", style: TextStyle(fontSize: 12, color: Colors.grey)),
-                  const Divider(),
-                  Row(
-                    children: [
-                      Text("হিসাব শুরু: ${periodStart.day}/${periodStart.month}/${periodStart.year}"),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: () async {
-                          final picked = await showDatePicker(
-                            context: context,
-                            initialDate: periodStart,
-                            firstDate: DateTime(2015),
-                            lastDate: DateTime(2035),
-                          );
-                          if (picked != null) setDialogState(() => periodStart = picked);
-                        },
-                        child: const Text("তারিখ দিন"),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      Text("হিসাব শেষ: ${periodEnd.day}/${periodEnd.month}/${periodEnd.year}"),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: () async {
-                          final picked = await showDatePicker(
-                            context: context,
-                            initialDate: periodEnd,
-                            firstDate: DateTime(2015),
-                            lastDate: DateTime(2035),
-                          );
-                          if (picked != null) setDialogState(() => periodEnd = picked);
-                        },
-                        child: const Text("তারিখ দিন"),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade800, foregroundColor: Colors.white),
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  _executeTimeWeightedProfitDistribution(periodStart, periodEnd, netP);
-                },
-                child: const Text("নিশ্চিত বণ্টন করুন"),
-              ),
-            ],
-          );
-        },
+      builder: (ctx) => AlertDialog(
+        title: const Text("📅 মূল জমা অনুযায়ী লাভ বণ্টন"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("বণ্টনযোগ্য নিট লাভ: ৳${netP.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 16)),
+            const SizedBox(height: 10),
+            const Text("সদস্যদের বর্তমান মোট সঞ্চয় বা জমার অনুপাত অনুযায়ী পুরো লাভের টাকাটি ১০০% নিখুঁতভাবে বন্টিত হবে।", style: TextStyle(fontSize: 13, color: Colors.grey)),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade800, foregroundColor: Colors.white),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _executeDepositRatioProfitDistribution(netP);
+            },
+            child: const Text("নিশ্চিত বণ্টন করুন"),
+          ),
+        ],
       ),
     );
   }
 
-  void _executeTimeWeightedProfitDistribution(DateTime periodStart, DateTime periodEnd, double netP) async {
-    if (periodEnd.isBefore(periodStart)) {
+  void _executeDepositRatioProfitDistribution(double netP) async {
+    double totalDep = totalCollection;
+    if (totalDep <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("শেষের তারিখ শুরুর তারিখের আগে হতে পারবে না!")),
+        const SnackBar(content: Text("সদস্যদের মোট জমা শূন্য, তাই লাভ বণ্টন করা সম্ভব নয়!")),
       );
       return;
-    }
-
-    int totalPeriodDays = periodEnd.difference(periodStart).inDays + 1;
-    if (totalPeriodDays <= 0) totalPeriodDays = 1;
-
-    Map<String, double> memberCapitalDays = {};
-    double totalSocietyCapitalDays = 0.0;
-
-    for (var member in globalMembers) {
-      double mCapDays = 0.0;
-      double accountedDeposit = 0.0;
-
-      var depositTxs = member.transactions.where((t) => !t.isProfit).toList();
-      for (var tx in depositTxs) {
-        accountedDeposit += tx.amount;
-        if (tx.date.isAfter(periodEnd)) continue;
-
-        DateTime effectiveDate = tx.date.isBefore(periodStart) ? periodStart : tx.date;
-        int activeDays = periodEnd.difference(effectiveDate).inDays + 1;
-        if (activeDays > 0) {
-          mCapDays += (tx.amount * activeDays);
-        }
-      }
-
-      if (member.deposit > accountedDeposit) {
-        double diff = member.deposit - accountedDeposit;
-        DateTime effectiveJoin = member.joinDate.isBefore(periodStart) ? periodStart : member.joinDate;
-        if (!effectiveJoin.isAfter(periodEnd)) {
-          int activeDays = periodEnd.difference(effectiveJoin).inDays + 1;
-          if (activeDays > 0) {
-            mCapDays += (diff * activeDays);
-          }
-        }
-      }
-
-      memberCapitalDays[member.id] = mCapDays;
-      totalSocietyCapitalDays += mCapDays;
-    }
-
-    if (totalSocietyCapitalDays <= 0) {
-      double totalDep = totalCollection;
-      if (totalDep <= 0) return;
-      for (var member in globalMembers) {
-        memberCapitalDays[member.id] = member.deposit;
-        totalSocietyCapitalDays += member.deposit;
-      }
     }
 
     String newBatchId = DateTime.now().millisecondsSinceEpoch.toString();
 
     setState(() {
-      for (var member in globalMembers) {
-        double weight = (memberCapitalDays[member.id] ?? 0.0) / totalSocietyCapitalDays;
-        double memberProfit = netP * weight;
+      double distributedSum = 0.0;
+      for (int i = 0; i < globalMembers.length; i++) {
+        var member = globalMembers[i];
+        double memberProfit = 0.0;
+        
+        // শেষ সদস্যের বেলায় নিখুঁত হিসাব মেলানোর জন্য বাকি সমস্ত টাকা অ্যাড করে দেওয়া হবে, ১ পয়সাও মিস হবে না
+        if (i == globalMembers.length - 1) {
+          memberProfit = double.parse((netP - distributedSum).toStringAsFixed(2));
+        } else {
+          memberProfit = double.parse(((netP * member.deposit) / totalDep).toStringAsFixed(2));
+          distributedSum += memberProfit;
+        }
 
         if (memberProfit > 0) {
           member.profitEarned += memberProfit;
@@ -1639,7 +1554,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
             TransactionHistory(
               date: DateTime.now(),
               amount: memberProfit,
-              paymentMethod: 'লাভ বণ্টন (${periodStart.day}/${periodStart.month}/${periodStart.year}-${periodEnd.day}/${periodEnd.month}/${periodEnd.year})',
+              paymentMethod: 'লাভ বণ্টন (জমার অনুপাত অনুযায়ী)',
               isProfit: true,
               batchId: newBatchId,
             ),
@@ -1661,7 +1576,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("৳${netP.toStringAsFixed(2)} লাভ জমাকৃত টাকার মেয়াদ অনুযায়ী বণ্টন সম্পন্ন এবং চলমান হিসাব ০.০০ করা হয়েছে!")),
+        SnackBar(content: Text("৳${netP.toStringAsFixed(2)} লাভ সদস্যদের জমার অনুপাতে ১০০% নিখুঁতভাবে বন্টিত হয়েছে!")),
       );
     }
   }
