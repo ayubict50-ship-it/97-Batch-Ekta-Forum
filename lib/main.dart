@@ -97,10 +97,10 @@ class SamobayApp extends StatelessWidget {
 
 class BusinessRecord {
   final String id;
-  final String title;
-  final double amount;
-  final bool isIncome;
-  final DateTime date;
+  String title;
+  double amount;
+  bool isIncome;
+  DateTime date;
   bool isSettled;
   String? batchId;
 
@@ -598,27 +598,27 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   double get totalDue =>
       globalMembers.fold(0.0, (sum, item) => sum + item.dueAmount);
 
-  // ১. লাভ পোস্টিং বা ব্যবসার রেকর্ড এডিট করার ফাংশন
-  void _showEditBusinessRecordDialog(BusinessRecord record) {
-    final amountController = TextEditingController(text: record.amount.toString());
+  // ১. লাভ পোস্টিং (Business Record) এডিট করার ফাংশন
+  void _showEditBusinessRecordDialog(BusinessRecord record, VoidCallback onUpdated) {
     final titleController = TextEditingController(text: record.title);
+    final amountController = TextEditingController(text: record.amount.toString());
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text("✏️ ব্যবসার রেকর্ড এডিট করুন"),
+        title: const Text("✏️ লাভ/খরচ পোস্টিং এডিট করুন"),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
-              controller: amountController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: "টাকার পরিমাণ"),
+              controller: titleController,
+              decoration: const InputDecoration(labelText: "বিবরণ", border: OutlineInputBorder()),
             ),
             const SizedBox(height: 10),
             TextField(
-              controller: titleController,
-              decoration: const InputDecoration(labelText: "শিরোনাম / বিবরণ"),
+              controller: amountController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: "টাকার পরিমাণ", border: OutlineInputBorder()),
             ),
           ],
         ),
@@ -627,91 +627,138 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
             onPressed: () async {
-              setState(() {
-                final newAmount = double.tryParse(amountController.text) ?? record.amount;
-                final newTitle = titleController.text;
-                
-                int index = globalBusinessRecords.indexWhere((r) => r.id == record.id);
-                if (index != -1) {
-                  globalBusinessRecords[index] = BusinessRecord(
-                    id: record.id,
-                    title: newTitle,
-                    amount: newAmount,
-                    isIncome: record.isIncome,
-                    date: record.date,
-                    isSettled: record.isSettled,
-                    batchId: record.batchId,
+              double? amt = double.tryParse(amountController.text.trim());
+              if (titleController.text.trim().isNotEmpty && amt != null && amt >= 0) {
+                setState(() {
+                  record.title = titleController.text.trim();
+                  record.amount = amt;
+                });
+                await CloudDatabaseService.syncAllDataToCloud();
+                onUpdated();
+                if (mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("পোস্টিং সফলভাবে আপডেট করা হয়েছে!")),
                   );
                 }
-              });
-              await CloudDatabaseService.syncAllDataToCloud();
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("রেকর্ড সফলভাবে আপডেট করা হয়েছে!")),
-              );
+              }
             },
-            child: const Text("সংরক্ষণ করুন"),
+            child: const Text("আপডেট করুন"),
           ),
         ],
       ),
     );
   }
 
-  // ২. সদস্যের জমা বা বকেয়া এডিট করার ফাংশন
-  void _showEditMemberFinancialsDialog(Member member) {
-    final depositController = TextEditingController(text: member.deposit.toString());
-    final dueController = TextEditingController(text: member.dueAmount.toString());
+  // ২. সদস্যের অ্যাকাউন্টে বন্টনকৃত লাভ (Distributed Profit) এডিট বা সংশোধন করার ফাংশন
+  void _showEditDistributedProfitDialog(Member member) {
+    // সদস্যের লেনদেন থেকে শুধু লাভ (isProfit == true) এন্ট্রিগুলো ফিল্টার করা
+    var profitTxs = member.transactions.where((t) => t.isProfit).toList();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: Text("💰 ${member.name}-এর বন্টনকৃত লাভ এডিট"),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: profitTxs.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.all(15.0),
+                      child: Text("এই সদস্যের নামে কোনো বন্টনকৃত লাভ পাওয়া যায়নি।", textAlign: TextAlign.center),
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: profitTxs.length,
+                      itemBuilder: (context, index) {
+                        var tx = profitTxs[index];
+                        return Card(
+                          color: Colors.blue.shade50,
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          child: ListTile(
+                            title: Text("৳${tx.amount.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                            subtitle: Text("${tx.paymentMethod}\nতারিখ: ${tx.date.day}/${tx.date.month}/${tx.date.year}"),
+                            isThreeLine: true,
+                            trailing: IconButton(
+                              icon: const Icon(Icons.edit, color: Colors.teal),
+                              onPressed: () {
+                                _showSingleProfitEditBox(member, tx, () {
+                                  setDialogState(() {
+                                    profitTxs = member.transactions.where((t) => t.isProfit).toList();
+                                  });
+                                  setState(() {});
+                                });
+                              },
+                              tooltip: "এই লাভের পরিমাণ সংশোধন করুন",
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বন্ধ করুন")),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showSingleProfitEditBox(Member member, TransactionHistory tx, VoidCallback onDone) {
+    final profitController = TextEditingController(text: tx.amount.toString());
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text("✏️ ${member.name}-এর হিসাব এডিট"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: depositController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: "সঞ্চয় / ব্যালেন্স (টাকা)"),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: dueController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: "বকেয়া / ডিউ (টাকা)"),
-            ),
-          ],
+        title: const Text("লাভের পরিমাণ সংশোধন করুন"),
+        content: TextField(
+          controller: profitController,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: "নতুন লাভের পরিমাণ (BDT)", border: OutlineInputBorder()),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
             onPressed: () async {
-              setState(() {
-                final newDeposit = double.tryParse(depositController.text) ?? member.deposit;
-                final newDue = double.tryParse(dueController.text) ?? member.dueAmount;
+              double? newAmt = double.tryParse(profitController.text.trim());
+              if (newAmt != null && newAmt >= 0) {
+                setState(() {
+                  double oldAmt = tx.amount;
+                  double diff = newAmt - oldAmt;
 
-                int index = globalMembers.indexWhere((m) => m.id == member.id);
-                if (index != -1) {
-                  globalMembers[index] = Member(
-                    id: member.id,
-                    name: member.name,
-                    mobile: member.mobile,
-                    pin: member.pin,
-                    deposit: newDeposit,
-                    profitEarned: member.profitEarned,
-                    joinDate: member.joinDate,
-                    transactions: member.transactions,
+                  // মোট লাভ থেকে ডিফারেন্স মাইনাস/প্লাস করা
+                  member.profitEarned += diff;
+                  if (member.profitEarned < 0) member.profitEarned = 0.0;
+
+                  // ট্রানজেকশন লিস্টে লাভের পরিমাণ আপডেট করা
+                  int txIndex = member.transactions.indexOf(tx);
+                  if (txIndex != -1) {
+                    member.transactions[txIndex] = TransactionHistory(
+                      date: tx.date,
+                      amount: newAmt,
+                      paymentMethod: tx.paymentMethod,
+                      trxId: tx.trxId,
+                      isProfit: true,
+                      batchId: tx.batchId,
+                      status: tx.status,
+                    );
+                  }
+                });
+
+                await CloudDatabaseService.syncAllDataToCloud();
+                onDone();
+                if (mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("লাভ সফলভাবে সংশোধন করা হয়েছে!")),
                   );
                 }
-              });
-              await CloudDatabaseService.syncAllDataToCloud();
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text("${member.name}-এর হিসাব আপডেট করা হয়েছে!")),
-              );
+              }
             },
-            child: const Text("আপডেট করুন"),
+            child: const Text("সংরক্ষণ করুন"),
           ),
         ],
       ),
@@ -1380,9 +1427,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                           IconButton(
                                             icon: const Icon(Icons.edit, color: Colors.teal, size: 20),
                                             onPressed: () {
-                                              _showEditBusinessRecordDialog(record);
+                                              _showEditBusinessRecordDialog(record, () {
+                                                setDialogState(() {});
+                                                setState(() {});
+                                              });
                                             },
-                                            tooltip: "রেকর্ড এডিট করুন",
+                                            tooltip: "পোস্টিং এডিট করুন",
                                           ),
                                           IconButton(
                                             icon: const Icon(Icons.delete, color: Colors.red, size: 20),
@@ -2084,11 +2134,11 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.calculate, color: Colors.indigo),
-                title: const Text("হিসাব/ব্যালেন্স ও ডিউ এডিট করুন"),
+                leading: const Icon(Icons.monetization_on, color: Colors.blue),
+                title: const Text("বন্টনকৃত লাভ সংশোধন (Edit Profit)"),
                 onTap: () {
                   Navigator.pop(ctx);
-                  _showEditMemberFinancialsDialog(member);
+                  _showEditDistributedProfitDialog(member);
                 },
               ),
               ListTile(
