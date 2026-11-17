@@ -704,8 +704,20 @@ void _showPendingApprovalsDialog() {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
             onPressed: () async {
               setState(() {
-                member.deposit = double.tryParse(depositController.text) ?? member.deposit;
-                member.dueAmount = double.tryParse(dueController.text) ?? member.dueAmount;
+                final newDeposit = double.tryParse(depositController.text) ?? member.deposit;
+                final newDue = double.tryParse(dueController.text) ?? member.dueAmount;
+
+                int index = globalMembers.indexWhere((m) => m.id == member.id);
+                if (index != -1) {
+                  globalMembers[index] = Member(
+                    id: member.id,
+                    name: member.name,
+                    phone: member.phone,
+                    deposit: newDeposit,
+                    dueAmount: newDue,
+                    batchId: member.batchId,
+                  );
+                }
               });
               await CloudDatabaseService.syncAllDataToCloud();
               Navigator.pop(ctx);
@@ -719,54 +731,6 @@ void _showPendingApprovalsDialog() {
       ),
     );
   }
-          return AlertDialog(
-            title: const Text("⏳ অনুমোদনের অপেক্ষায় থাকা জমা"),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: pendingList.isEmpty
-                  ? const Padding(
-                      padding: EdgeInsets.all(20.0),
-                      child: Text("বর্তমানে কোনো পেন্ডিং জমা নেই।", textAlign: TextAlign.center),
-                    )
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: pendingList.length,
-                      itemBuilder: (context, index) {
-                        var item = pendingList[index];
-                        Member member = item['member'];
-                        TransactionHistory tx = item['tx'];
-
-                        return Card(
-                          color: Colors.orange.shade50,
-                          margin: const EdgeInsets.symmetric(vertical: 6),
-                          child: Padding(
-                            padding: const EdgeInsets.all(10.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text("সদস্য: ${member.name} (ID: ${member.id})", style: const TextStyle(fontWeight: FontWeight.bold)),
-                                Text("জমার পরিমাণ: ৳${tx.amount.toStringAsFixed(2)}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                                Text("মাধ্যম: ${tx.paymentMethod} | TrxID: ${tx.trxId}"),
-                                Text("তারিখ: ${tx.date.day}/${tx.date.month}/${tx.date.year}"),
-                                const SizedBox(height: 8),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    TextButton.icon(
-                                      style: TextButton.styleFrom(foregroundColor: Colors.red),
-                                      onPressed: () async {
-                                        setState(() {
-                                          member.transactions.remove(tx);
-                                        });
-                                        await CloudDatabaseService.syncAllDataToCloud();
-                                        setDialogState(() {});
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text("পেমেন্টটি বাতিল করা হয়েছে!")),
-                                        );
-                                      },
-                                      icon: const Icon(Icons.close, size: 16),
-                                      label: const Text("বাতিল"),
-                                    ),
                                     const SizedBox(width: 8),
                                     ElevatedButton.icon(
                                       style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
