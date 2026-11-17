@@ -11,7 +11,6 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:open_file/open_file.dart';
 import 'package:printing/printing.dart';
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -97,10 +96,10 @@ class SamobayApp extends StatelessWidget {
 
 class BusinessRecord {
   final String id;
-  String title;
-  double amount;
-  bool isIncome;
-  DateTime date;
+  final String title;
+  final double amount;
+  final bool isIncome;
+  final DateTime date;
   bool isSettled;
   String? batchId;
 
@@ -142,7 +141,8 @@ class TransactionHistory {
   final String trxId;
   final bool isProfit;
   final String? batchId;
-  final String status;
+
+  final String status; // 'pending' বা 'approved'
 
   TransactionHistory({
     required this.date,
@@ -151,7 +151,7 @@ class TransactionHistory {
     this.trxId = '',
     this.isProfit = false,
     this.batchId,
-    this.status = 'approved',
+    this.status = 'approved', // পুরোনো বা সরাসরি ক্যাশ জমার ক্ষেত্রে বাই ডিফল্ট অ্যাপ্রুভড থাকবে
   });
 
   Map<String, dynamic> toJson() => {
@@ -161,7 +161,7 @@ class TransactionHistory {
         'trxId': trxId,
         'isProfit': isProfit,
         'batchId': batchId,
-        'status': status,
+    'status': status,
       };
 
   factory TransactionHistory.fromJson(Map<String, dynamic> json) => TransactionHistory(
@@ -171,7 +171,7 @@ class TransactionHistory {
         trxId: json['trxId'] ?? '',
         isProfit: json['isProfit'] ?? false,
         batchId: json['batchId'],
-        status: json['status'] ?? 'approved',
+    status: json['status'] ?? 'approved',
       );
 }
 
@@ -342,6 +342,8 @@ class SamobayFinance {
 Future<void> saveReportToFile(BuildContext context, String fileName, String content) async {
   try {
     final pdf = pw.Document();
+
+    // সরাসরি অনলাইন থেকে নিখুঁত বাংলা ফন্ট লোড করার কোড
     final ttf = await PdfGoogleFonts.hindSiliguriRegular();
 
     pdf.addPage(
@@ -372,7 +374,7 @@ Future<void> saveReportToFile(BuildContext context, String fileName, String cont
       ),
     );
 
-    Directory? directory;
+  Directory? directory;
     if (Platform.isAndroid) {
       directory = await getExternalStorageDirectory() ?? await getApplicationDocumentsDirectory();
     } else {
@@ -399,7 +401,6 @@ Future<void> saveReportToFile(BuildContext context, String fileName, String cont
     }
   }
 }
-
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -597,177 +598,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
 
   double get totalDue =>
       globalMembers.fold(0.0, (sum, item) => sum + item.dueAmount);
-
-  // ১. লাভ পোস্টিং (Business Record) এডিট করার ফাংশন
-  void _showEditBusinessRecordDialog(BusinessRecord record, VoidCallback onUpdated) {
-    final titleController = TextEditingController(text: record.title);
-    final amountController = TextEditingController(text: record.amount.toString());
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("✏️ লাভ/খরচ পোস্টিং এডিট করুন"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: titleController,
-              decoration: const InputDecoration(labelText: "বিবরণ", border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: amountController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: "টাকার পরিমাণ", border: OutlineInputBorder()),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-            onPressed: () async {
-              double? amt = double.tryParse(amountController.text.trim());
-              if (titleController.text.trim().isNotEmpty && amt != null && amt >= 0) {
-                setState(() {
-                  record.title = titleController.text.trim();
-                  record.amount = amt;
-                });
-                await CloudDatabaseService.syncAllDataToCloud();
-                onUpdated();
-                if (mounted) {
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("পোস্টিং সফলভাবে আপডেট করা হয়েছে!")),
-                  );
-                }
-              }
-            },
-            child: const Text("আপডেট করুন"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ২. সদস্যের অ্যাকাউন্টে বন্টনকৃত লাভ (Distributed Profit) এডিট করার ফাংশন
-  void _showEditDistributedProfitDialog(Member member) {
-    var profitTxs = member.transactions.where((t) => t.isProfit).toList();
-
+void _showPendingApprovalsDialog() {
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) {
-          return AlertDialog(
-            title: Text("💰 ${member.name}-এর বন্টনকৃত লাভ এডিট"),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: profitTxs.isEmpty
-                  ? const Padding(
-                      padding: EdgeInsets.all(15.0),
-                      child: Text("এই সদস্যের নামে কোনো বন্টনকৃত লাভ পাওয়া যায়নি।", textAlign: TextAlign.center),
-                    )
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: profitTxs.length,
-                      itemBuilder: (context, index) {
-                        var tx = profitTxs[index];
-                        return Card(
-                          color: Colors.blue.shade50,
-                          margin: const EdgeInsets.symmetric(vertical: 4),
-                          child: ListTile(
-                            title: Text("৳${tx.amount.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
-                            subtitle: Text("${tx.paymentMethod}\nতারিখ: ${tx.date.day}/${tx.date.month}/${tx.date.year}"),
-                            isThreeLine: true,
-                            trailing: IconButton(
-                              icon: const Icon(Icons.edit, color: Colors.teal),
-                              onPressed: () {
-                                _showSingleProfitEditBox(member, tx, () {
-                                  setDialogState(() {
-                                    profitTxs = member.transactions.where((t) => t.isProfit).toList();
-                                  });
-                                  setState(() {});
-                                });
-                              },
-                              tooltip: "এই লাভের পরিমাণ সংশোধন করুন",
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বন্ধ করুন")),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  void _showSingleProfitEditBox(Member member, TransactionHistory tx, VoidCallback onDone) {
-    final profitController = TextEditingController(text: tx.amount.toString());
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("লাভের পরিমাণ সংশোধন করুন"),
-        content: TextField(
-          controller: profitController,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: "নতুন লাভের পরিমাণ (BDT)", border: OutlineInputBorder()),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-            onPressed: () async {
-              double? newAmt = double.tryParse(profitController.text.trim());
-              if (newAmt != null && newAmt >= 0) {
-                setState(() {
-                  double oldAmt = tx.amount;
-                  double diff = newAmt - oldAmt;
-
-                  member.profitEarned += diff;
-                  if (member.profitEarned < 0) member.profitEarned = 0.0;
-
-                  int txIndex = member.transactions.indexOf(tx);
-                  if (txIndex != -1) {
-                    member.transactions[txIndex] = TransactionHistory(
-                      date: tx.date,
-                      amount: newAmt,
-                      paymentMethod: tx.paymentMethod,
-                      trxId: tx.trxId,
-                      isProfit: true,
-                      batchId: tx.batchId,
-                      status: tx.status,
-                    );
-                  }
-                });
-
-                await CloudDatabaseService.syncAllDataToCloud();
-                onDone();
-                if (mounted) {
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("লাভ সফলভাবে সংশোধন করা হয়েছে!")),
-                  );
-                }
-              }
-            },
-            child: const Text("সংরক্ষণ করুন"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showPendingApprovalsDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          var pendingList = [];
+       var pendingList = [];
           for (var member in globalMembers) {
             for (var tx in member.transactions) {
               if (tx.status == 'pending') {
@@ -873,7 +709,6 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       ),
     );
   }
-
   void _showChangeAdminCredentialsDialog() {
     final adminIdController = TextEditingController(text: globalAdminId);
     final adminPassController = TextEditingController(text: globalAdminPassword);
@@ -1422,16 +1257,6 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                           ),
                                           const SizedBox(width: 6),
                                           IconButton(
-                                            icon: const Icon(Icons.edit, color: Colors.teal, size: 20),
-                                            onPressed: () {
-                                              _showEditBusinessRecordDialog(record, () {
-                                                setDialogState(() {});
-                                                setState(() {});
-                                              });
-                                            },
-                                            tooltip: "পোস্টিং এডিট করুন",
-                                          ),
-                                          IconButton(
                                             icon: const Icon(Icons.delete, color: Colors.red, size: 20),
                                             onPressed: () async {
                                               setState(() {
@@ -1495,93 +1320,140 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       return;
     }
 
+    DateTime periodStart = DateTime(DateTime.now().year, 1, 1);
+    DateTime periodEnd = DateTime.now();
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("📅 জমাকৃত টাকার মেয়াদ ও তারিখ অনুযায়ী লাভ বণ্টন"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text("বণ্টনযোগ্য নিট লাভ: ৳${netP.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 16)),
-            const SizedBox(height: 10),
-            const Text("সদস্যদের জমাকৃত টাকার পরিমাণ এবং তা কত দিন বা তারিখ পর্যন্ত ইনভেস্ট ছিল (Time-Weighted Capital-Days), তার অনুপাতে পুরো লাভের টাকাটি ১০০% নিখুঁতভাবে বন্টিত হবে। কোনো টাকা অবন্টিত থাকবে না।", style: TextStyle(fontSize: 13, color: Colors.grey)),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade800, foregroundColor: Colors.white),
-            onPressed: () {
-              Navigator.pop(ctx);
-              _executeTimeWeightedProfitDistribution(netP);
-            },
-            child: const Text("নিশ্চিত বণ্টন করুন"),
-          ),
-        ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text("📅 তারিখ ও মূলধন অনুযায়ী লাভ বণ্টন"),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("বণ্টনযোগ্য নিট লাভ: ৳${netP.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 16)),
+                  const SizedBox(height: 10),
+                  const Text("সদস্যদের কিস্তি জমার তারিখ অনুযায়ী (টাকা × দিন) অনুপাতে এই লাভ ভাগ হবে।", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  const Divider(),
+                  Row(
+                    children: [
+                      Text("হিসাব শুরু: ${periodStart.day}/${periodStart.month}/${periodStart.year}"),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: periodStart,
+                            firstDate: DateTime(2015),
+                            lastDate: DateTime(2035),
+                          );
+                          if (picked != null) setDialogState(() => periodStart = picked);
+                        },
+                        child: const Text("তারিখ দিন"),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      Text("হিসাব শেষ: ${periodEnd.day}/${periodEnd.month}/${periodEnd.year}"),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: periodEnd,
+                            firstDate: DateTime(2015),
+                            lastDate: DateTime(2035),
+                          );
+                          if (picked != null) setDialogState(() => periodEnd = picked);
+                        },
+                        child: const Text("তারিখ দিন"),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade800, foregroundColor: Colors.white),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _executeTimeWeightedProfitDistribution(periodStart, periodEnd, netP);
+                },
+                child: const Text("নিশ্চিত বণ্টন করুন"),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
-  // টাইম-ওয়েইটেড (তারিখ ও মেয়াদভিত্তিক) ১০০% নিখুঁত লাভ বণ্টন লজিক
-  void _executeTimeWeightedProfitDistribution(double netP) async {
-    if (globalMembers.isEmpty) return;
+  void _executeTimeWeightedProfitDistribution(DateTime periodStart, DateTime periodEnd, double netP) async {
+    if (periodEnd.isBefore(periodStart)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("শেষের তারিখ শুরুর তারিখের আগে হতে পারবে না!")),
+      );
+      return;
+    }
 
-    DateTime now = DateTime.now();
-    List> memberWeights = [];
-    double totalWeight = 0.0;
+    int totalPeriodDays = periodEnd.difference(periodStart).inDays + 1;
+    if (totalPeriodDays <= 0) totalPeriodDays = 1;
+
+    Map<String, double> memberCapitalDays = {};
+    double totalSocietyCapitalDays = 0.0;
 
     for (var member in globalMembers) {
-      double memberEffectiveScore = 0.0;
+      double mCapDays = 0.0;
+      double accountedDeposit = 0.0;
 
-      if (member.transactions.isEmpty) {
-        int days = now.difference(member.joinDate).inDays;
-        if (days < 1) days = 1;
-        memberEffectiveScore = member.deposit * days;
-      } else {
-        for (var tx in member.transactions) {
-          if (!tx.isProfit) {
-            int days = now.difference(tx.date).inDays;
-            if (days < 1) days = 1;
-            memberEffectiveScore += (tx.amount * days);
+      var depositTxs = member.transactions.where((t) => !t.isProfit).toList();
+      for (var tx in depositTxs) {
+        accountedDeposit += tx.amount;
+        if (tx.date.isAfter(periodEnd)) continue;
+
+        DateTime effectiveDate = tx.date.isBefore(periodStart) ? periodStart : tx.date;
+        int activeDays = periodEnd.difference(effectiveDate).inDays + 1;
+        if (activeDays > 0) {
+          mCapDays += (tx.amount * activeDays);
+        }
+      }
+
+      if (member.deposit > accountedDeposit) {
+        double diff = member.deposit - accountedDeposit;
+        DateTime effectiveJoin = member.joinDate.isBefore(periodStart) ? periodStart : member.joinDate;
+        if (!effectiveJoin.isAfter(periodEnd)) {
+          int activeDays = periodEnd.difference(effectiveJoin).inDays + 1;
+          if (activeDays > 0) {
+            mCapDays += (diff * activeDays);
           }
         }
       }
 
-      if (memberEffectiveScore <= 0) {
-        memberEffectiveScore = member.deposit > 0 ? member.deposit * 30 : 1.0;
-      }
-
-      totalWeight += memberEffectiveScore;
-      memberWeights.add({
-        'member': member,
-        'weight': memberEffectiveScore,
-      });
+      memberCapitalDays[member.id] = mCapDays;
+      totalSocietyCapitalDays += mCapDays;
     }
 
-    if (totalWeight <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("বণ্টন করার মতো উপযুক্ত ওয়েট বা জমা পাওয়া যায়নি!")),
-      );
-      return;
+    if (totalSocietyCapitalDays <= 0) {
+      double totalDep = totalCollection;
+      if (totalDep <= 0) return;
+      for (var member in globalMembers) {
+        memberCapitalDays[member.id] = member.deposit;
+        totalSocietyCapitalDays += member.deposit;
+      }
     }
 
     String newBatchId = DateTime.now().millisecondsSinceEpoch.toString();
 
     setState(() {
-      double distributedSum = 0.0;
-      for (int i = 0; i < memberWeights.length; i++) {
-        var item = memberWeights[i];
-        Member member = item['member'];
-        double weight = item['weight'];
-
-        double memberProfit = 0.0;
-        if (i == memberWeights.length - 1) {
-          memberProfit = double.parse((netP - distributedSum).toStringAsFixed(2));
-        } else {
-          memberProfit = double.parse(((netP * weight) / totalWeight).toStringAsFixed(2));
-          distributedSum += memberProfit;
-        }
+      for (var member in globalMembers) {
+        double weight = (memberCapitalDays[member.id] ?? 0.0) / totalSocietyCapitalDays;
+        double memberProfit = netP * weight;
 
         if (memberProfit > 0) {
           member.profitEarned += memberProfit;
@@ -1589,7 +1461,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
             TransactionHistory(
               date: DateTime.now(),
               amount: memberProfit,
-              paymentMethod: 'লাভ বণ্টন (তারিখ ও মেয়াদ অনুযায়ী)',
+              paymentMethod: 'লাভ বণ্টন (${periodStart.day}/${periodStart.month}/${periodStart.year}-${periodEnd.day}/${periodEnd.month}/${periodEnd.year})',
               isProfit: true,
               batchId: newBatchId,
             ),
@@ -1611,7 +1483,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("৳${netP.toStringAsFixed(2)} লাভ সদস্যদের তারিখ ও মেয়াদ অনুযায়ী ১০০% নিখুঁতভাবে বন্টিত হয়েছে!")),
+        SnackBar(content: Text("৳${netP.toStringAsFixed(2)} লাভ জমাকৃত টাকার মেয়াদ অনুযায়ী বণ্টন সম্পন্ন এবং চলমান হিসাব ০.০০ করা হয়েছে!")),
       );
     }
   }
@@ -1693,7 +1565,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("⚠️ সদস্য ডিলিট নিশ্চিতকরণ"),
-        content: Text("আপনি কি নিশ্চিত যে '${member.name}' (ID: ${member.id})-কে সমিতির তালিকা থেকে স্থায়ীভাবে মুছে ফেলতে চান? সমস্ত জমা ও লেনদেনের হিসাব মুছে যাবে।"),
+        content: Text("আপনি কি নিশ্চিত যে '${member.name}' (ID: ${member.id})-কে সমিতির তালিকা থেকে স্থায়ীভাবে মুছে ফেলতে চান? তাঁর সমস্ত জমা ও লেনদেনের হিসাব মুছে যাবে।"),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
           ElevatedButton(
@@ -1906,6 +1778,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   void _showEditMemberDialog(Member member) {
     final nameController = TextEditingController(text: member.name);
     final mobileController = TextEditingController(text: member.mobile);
+    final depositController = TextEditingController(text: member.deposit.toString());
 
     showDialog(
       context: context,
@@ -1917,6 +1790,8 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
             TextField(controller: nameController, decoration: const InputDecoration(labelText: "নাম")),
             const SizedBox(height: 10),
             TextField(controller: mobileController, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: "মোবাইল নম্বর")),
+            const SizedBox(height: 10),
+            TextField(controller: depositController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "মোট জমা সংশোধন")),
           ],
         ),
         actions: [
@@ -1926,6 +1801,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               setState(() {
                 member.name = nameController.text.trim();
                 member.mobile = mobileController.text.trim();
+                member.deposit = double.tryParse(depositController.text) ?? member.deposit;
               });
               await CloudDatabaseService.syncAllDataToCloud();
               if (mounted) {
@@ -2033,15 +1909,13 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
             onPressed: () async {
               Navigator.pop(ctx);
               String statementText = "=== [$globalSocietyName] সদস্য স্টেটমেন্ট ===\n\n";
-              statementText += "নাম: ${member.name} (ID: ${member.id})\n";
-              statementText += "মোবাইল: ${member.mobile}\n";
-              statementText += "মূল জমা: ৳${member.deposit}\n";
-              statementText += "অর্জিত লাভ: ৳${member.profitEarned}\n";
-              statementText += "সর্বমোট ব্যালেন্স: ৳${member.totalBalance}\n\nলেনদেনসমূহ:\n";
+              statementText += "সদস্যের নাম: ${member.name}\nID: ${member.id} | মোবাইল: ${member.mobile}\n";
+              statementText += "মূল জমা: ৳${member.deposit}\nঅর্জিত লাভ: ৳${member.profitEarned}\nসর্বমোট ব্যালেন্স: ৳${member.totalBalance}\n";
+              statementText += "বকেয়া/অগ্রিম: ${member.dueAmount > 0 ? 'বকেয়া ৳${member.dueAmount}' : 'অগ্রিম ৳${member.advanceAmount}'}\n\nলেনদেনের ইতিহাস:\n";
               for (var t in member.transactions) {
                 statementText += "- ${t.date.day}/${t.date.month}/${t.date.year}: ৳${t.amount} (${t.paymentMethod})\n";
               }
-              await saveReportToFile(context, "${member.name}_Statement.pdf", statementText);
+              await saveReportToFile(context, "Member_${member.name}_Statement.pdf", statementText);
             },
             icon: const Icon(Icons.download, size: 16),
             label: const Text("ফাইল ডাউনলোড (PDF)"),
@@ -2083,14 +1957,6 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 onTap: () {
                   Navigator.pop(ctx);
                   _showEditMemberDialog(member);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.monetization_on, color: Colors.blue),
-                title: const Text("বন্টনকৃত লাভ সংশোধন (Edit Profit)"),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _showEditDistributedProfitDialog(member);
                 },
               ),
               ListTile(
@@ -2678,14 +2544,14 @@ class _MemberDashboardState extends State<MemberDashboard> {
                 onPressed: () async {
                   double? amount = double.tryParse(_amountController.text.trim());
                   if (amount != null && amount > 0 && _trxController.text.isNotEmpty) {
-                    setState(() {
+                  setState(() {
                       widget.member.transactions.add(
                         TransactionHistory(
                           date: DateTime.now(),
                           amount: amount,
                           paymentMethod: _selectedMethod == 'bKash' ? 'bKash Send Money' : 'সোনালী ব্যাংক',
                           trxId: _trxController.text.trim(),
-                          status: 'pending',
+                          status: 'pending', // <--- এটি TransactionHistory এর ভেতরে এভাবে বসবে
                         ),
                       );
                     });
@@ -2693,7 +2559,7 @@ class _MemberDashboardState extends State<MemberDashboard> {
                     if (mounted) {
                       Navigator.pop(ctx);
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("আপনার পেমেন্টটি সফলভাবে সাবমিট হয়েছে। এডমিন অনুমোদন করার পর এটি আপনার অ্যাকাউন্টে যোগ হবে!")),
+                  SnackBar(content: Text("আপনার পেমেন্টটি সফলভাবে সাবমিট হয়েছে। এডমিন অনুমোদন করার পর এটি আপনার অ্যাকাউন্টে যোগ হবে!")),
                       );
                     }
                   }
