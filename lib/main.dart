@@ -614,7 +614,98 @@ void _showPendingApprovalsDialog() {
               }
             }
           }
+// ১. লাভ পোস্টিং বা ব্যবসার রেকর্ড এডিট করার ফাংশন
+  void _showEditBusinessRecordDialog(BusinessRecord record) {
+    final amountController = TextEditingController(text: record.amount.toString());
+    final noteController = TextEditingController(text: record.note);
 
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("✏️ ব্যবসার রেকর্ড এডিট করুন"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: amountController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: "টাকার পরিমাণ"),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: noteController,
+              decoration: const InputDecoration(labelText: "বিবরণ বা নোট"),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+            onPressed: () async {
+              setState(() {
+                record.amount = double.tryParse(amountController.text) ?? record.amount;
+                record.note = noteController.text;
+              });
+              await CloudDatabaseService.syncAllDataToCloud();
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("রেকর্ড সফলভাবে আপডেট করা হয়েছে!")),
+              );
+            },
+            child: const Text("সংরক্ষণ করুন"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ২. সদস্যের জমা, বকেয়া বা লাভ এডিট করার ফাংশন
+  void _showEditMemberFinancialsDialog(Member member) {
+    final depositController = TextEditingController(text: member.deposit.toString());
+    final dueController = TextEditingController(text: member.dueAmount.toString());
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text("✏️ ${member.name}-এর হিসাব এডিট"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: depositController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: "সঞ্চয় / ব্যালেন্স (টাকা)"),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: dueController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: "বকেয়া / ডিউ (টাকা)"),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+            onPressed: () async {
+              setState(() {
+                member.deposit = double.tryParse(depositController.text) ?? member.deposit;
+                member.dueAmount = double.tryParse(dueController.text) ?? member.dueAmount;
+              });
+              await CloudDatabaseService.syncAllDataToCloud();
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text("${member.name}-এর হিসাব আপডেট করা হয়েছে!")),
+              );
+            },
+            child: const Text("আপডেট করুন"),
+          ),
+        ],
+      ),
+    );
+  }
           return AlertDialog(
             title: const Text("⏳ অনুমোদনের অপেক্ষায় থাকা জমা"),
             content: SizedBox(
