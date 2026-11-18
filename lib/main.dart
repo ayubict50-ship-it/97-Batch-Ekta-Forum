@@ -592,7 +592,183 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   final TextEditingController _pinController = TextEditingController();
   final TextEditingController _initialDepositController = TextEditingController();
   DateTime _selectedDate = DateTime(2019, 1, 1);
+void _showProfitDistributionDialog() {
+    double netP = SamobayFinance.currentNetProfit;
 
+    if (netP <= 0 || globalMembers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("বণ্টন করার মতো পর্যাপ্ত চলমান নিট লাভ বা সদস্য নেই!")),
+      );
+      return;
+    }
+
+    DateTime periodStart = DateTime(DateTime.now().year, 1, 1);
+    DateTime periodEnd = DateTime.now();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text("📅 তারিখ ও মূলধন অনুযায়ী লাভ বণ্টন"),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("বণ্টনযোগ্য নিট লাভ: ৳${netP.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 16)),
+                  const SizedBox(height: 10),
+                  const Text("সদস্যদের কিস্তি জমার তারিখ অনুযায়ী (টাকা × দিন) অনুপাতে এই লাভ ভাগ হবে।", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  const Divider(),
+                  Row(
+                    children: [
+                      Text("হিসাব শুরু: ${periodStart.day}/${periodStart.month}/${periodStart.year}"),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: periodStart,
+                            firstDate: DateTime(2015),
+                            lastDate: DateTime(2035),
+                          );
+                          if (picked != null) setDialogState(() => periodStart = picked);
+                        },
+                        child: const Text("তারিখ দিন"),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      Text("হিসাব শেষ: ${periodEnd.day}/${periodEnd.month}/${periodEnd.year}"),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: periodEnd,
+                            firstDate: DateTime(2015),
+                            lastDate: DateTime(2035),
+                          );
+                          if (picked != null) setDialogState(() => periodEnd = picked);
+                        },
+                        child: const Text("তারিখ দিন"),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade800, foregroundColor: Colors.white),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _executeTimeWeightedProfitDistribution(periodStart, periodEnd, netP);
+                },
+                child: const Text("নিশ্চিত বণ্টন করুন"),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _executeTimeWeightedProfitDistribution(DateTime periodStart, DateTime periodEnd, double netP) async {
+    if (periodEnd.isBefore(periodStart)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("শেষের তারিখ শুরুর তারিখের আগে হতে পারবে না!")),
+      );
+      return;
+    }
+
+    int totalPeriodDays = periodEnd.difference(periodStart).inDays + 1;
+    if (totalPeriodDays <= 0) totalPeriodDays = 1;
+
+    Map<String, double> memberCapitalDays = {};
+    double totalSocietyCapitalDays = 0.0;
+
+    for (var member in globalMembers) {
+      double mCapDays = 0.0;
+      double accountedDeposit = 0.0;
+
+      var depositTxs = member.transactions.where((t) => !t.isProfit).toList();
+      for (var tx in depositTxs) {
+        accountedDeposit += tx.amount;
+        if (tx.date.isAfter(periodEnd)) continue;
+
+        DateTime effectiveDate = tx.date.isBefore(periodStart) ? periodStart : tx.date;
+        int activeDays = periodEnd.difference(effectiveDate).inDays + 1;
+        if (activeDays > 0) {
+          mCapDays += (tx.amount * activeDays);
+        }
+      }
+
+      if (member.deposit > accountedDeposit) {
+        double diff = member.deposit - accountedDeposit;
+        DateTime effectiveJoin = member.joinDate.isBefore(periodStart) ? periodStart : member.joinDate;
+        if (!effectiveJoin.isAfter(periodEnd)) {
+          int activeDays = periodEnd.difference(effectiveJoin).inDays + 1;
+          if (activeDays > 0) {
+            mCapDays += (diff * activeDays);
+          }
+        }
+      }
+
+      memberCapitalDays[member.id] = mCapDays;
+      totalSocietyCapitalDays += mCapDays;
+    }
+
+    if (totalSocietyCapitalDays <= 0) {
+      double totalDep = totalCollection;
+      if (totalDep <= 0) return;
+      for (var member in globalMembers) {
+        memberCapitalDays[member.id] = member.deposit;
+        totalSocietyCapitalDays += member.deposit;
+      }
+    }
+
+    String newBatchId = DateTime.now().millisecondsSinceEpoch.toString();
+
+    setState(() {
+      for (var member in globalMembers) {
+        double weight = (memberCapitalDays[member.id] ?? 0.0) / totalSocietyCapitalDays;
+        double memberProfit = netP * weight;
+
+        if (memberProfit > 0) {
+          member.profitEarned += memberProfit;
+          member.transactions.add(
+            TransactionHistory(
+              date: DateTime.now(),
+              amount: memberProfit,
+              paymentMethod: 'লাভ বণ্টন (${periodStart.day}/${periodStart.month}/${periodStart.year}-${periodEnd.day}/${periodEnd.month}/${periodEnd.year})',
+              isProfit: true,
+              batchId: newBatchId,
+            ),
+          );
+        }
+      }
+
+      for (var record in globalBusinessRecords) {
+        if (!record.isSettled) {
+          record.isSettled = true;
+          record.batchId = newBatchId;
+        }
+      }
+
+      lastDistributionBatchId = newBatchId;
+    });
+
+    await CloudDatabaseService.syncAllDataToCloud();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("৳${netP.toStringAsFixed(2)} লাভ জমাকৃত টাকার মেয়াদ অনুযায়ী বণ্টন সম্পন্ন এবং চলমান হিসাব ০.০০ করা হয়েছে!")),
+      );
+    }
+  }
   double get totalCollection =>
       globalMembers.fold(0.0, (sum, item) => sum + item.deposit);
 
