@@ -14,10 +14,10 @@ import 'package:printing/printing.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   try {
     await Firebase.initializeApp();
-    
+
     FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
 
     PlatformDispatcher.instance.onError = (error, stack) {
@@ -27,7 +27,7 @@ void main() async {
   } catch (e) {
     debugPrint("Firebase Init Error: $e");
   }
-  
+
   runApp(const SamobayApp());
 }
 
@@ -272,7 +272,7 @@ class CloudDatabaseService {
 
       List businessList = globalBusinessRecords.map((b) => b.toJson()).toList();
       await _db.collection('society_data').doc('business').set({'list': businessList});
-      
+
       List slabsList = globalInstallmentSlabs.map((s) => s.toJson()).toList();
       await _db.collection('society_data').doc('slabs').set({'list': slabsList});
 
@@ -635,11 +635,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   final TextEditingController _initialDepositController = TextEditingController();
   DateTime _selectedDate = DateTime(2019, 1, 1);
 
-  double get totalCollection =>
-      globalMembers.fold(0.0, (sum, item) => sum + item.deposit);
+  double get totalCollection => globalMembers.fold(0.0, (sum, item) => sum + item.deposit);
 
-  double get totalDue =>
-      globalMembers.fold(0.0, (sum, item) => sum + item.dueAmount);
+  double get totalDue => globalMembers.fold(0.0, (sum, item) => sum + item.dueAmount);
 
   String _getBengaliMonthName(int month) {
     const months = [
@@ -696,12 +694,8 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               .where((r) => r.date.year == selectedYear && r.date.month == selectedMonth)
               .toList();
 
-          double monthlyBizIncome = monthBizRecords
-              .where((r) => r.isIncome)
-              .fold(0.0, (sum, r) => sum + r.amount);
-          double monthlyBizExpense = monthBizRecords
-              .where((r) => !r.isIncome)
-              .fold(0.0, (sum, r) => sum + r.amount);
+          double monthlyBizIncome = monthBizRecords.where((r) => r.isIncome).fold(0.0, (sum, r) => sum + r.amount);
+          double monthlyBizExpense = monthBizRecords.where((r) => !r.isIncome).fold(0.0, (sum, r) => sum + r.amount);
 
           String monthLabel = "${_getBengaliMonthName(selectedMonth)} $selectedYear";
 
@@ -1756,7 +1750,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       double weight = capDays / totalSocietyCapitalDays;
       double rawProfit = netP * weight;
       double roundedProfit = double.parse(rawProfit.toStringAsFixed(2));
-      
+
       calculatedProfits[member.id] = roundedProfit;
       totalAllocated += roundedProfit;
     }
@@ -1945,8 +1939,8 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     double advance = member.advanceAmount;
     double profit = member.profitEarned;
 
-    String dueAdvanceStr = due > 0 
-        ? "বকেয়া: ${due.toStringAsFixed(2)}৳ (${member.dueMonthsCount} মাস)" 
+    String dueAdvanceStr = due > 0
+        ? "বকেয়া: ${due.toStringAsFixed(2)}৳ (${member.dueMonthsCount} মাস)"
         : (advance > 0 ? "অগ্রিম জমা: ${advance.toStringAsFixed(2)}৳" : "বকেয়া: ৳0.00");
 
     String smsMessage =
