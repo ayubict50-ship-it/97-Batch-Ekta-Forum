@@ -27,6 +27,6 @@ flutter:
   uses-material-design: true
 
   fonts:
-    - family: SolaimanLipi
+    - family: NikoshBAN
       fonts:
-        - asset: assets/fonts/SolaimanLipi.ttf
+        - asset: assets/fonts/NikoshBAN.ttf
