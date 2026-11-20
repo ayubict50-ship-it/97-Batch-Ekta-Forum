@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'utils/sms_helper.dart';
 
 class DueReminderDialog extends StatelessWidget {
   final String societyName;
@@ -18,60 +19,33 @@ class DueReminderDialog extends StatelessWidget {
     String mobile,
     String message,
   ) async {
-    final Uri smsUri = Uri(
-      scheme: 'sms',
-      path: mobile,
-      queryParameters: <String, String>{
-        'body': message,
-      },
+    await SmsHelper.openDirectSms(
+      context: context,
+      phoneNumber: mobile,
+      message: message,
     );
-
-    try {
-      if (await canLaunchUrl(smsUri)) {
-        await launchUrl(smsUri);
-      } else {
-        await Clipboard.setData(ClipboardData(text: message));
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                "$name-এর রিমাইন্ডার কপি হয়েছে। SMS অ্যাপ খুলে পেস্ট করুন।",
-              ),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      await Clipboard.setData(ClipboardData(text: message));
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("রিমাইন্ডার মেসেজটি ক্লিপবোর্ডে কপি করা হয়েছে।"),
-          ),
-        );
-      }
-    }
   }
 
   String _buildReminderText(String name, double dueAmount, int dueMonthsCount) {
     return "[$societyName]\n"
-        "প্রিয় $name,\n"
-        "আপনার মাসিক কিস্তির বকেয়া রয়েছে: ৳${dueAmount.toStringAsFixed(2)} ($dueMonthsCount মাস)।\n"
-        "অনুগ্রহ করে দ্রুত বকেয়া পরিশোধ করার জন্য অনুরোধ করা হলো।\n"
+        "প্রিয় $name,\n"
+        "আপনার মাসিক কিস্তির বকেয়া রয়েছে: ৳${dueAmount.toStringAsFixed(2)} ($dueMonthsCount মাস)।\n"
+        "অনুগ্রহ করে দ্রুত বকেয়া পরিশোধ করার জন্য অনুরোধ করা হলো।\n"
         "ধন্যবাদ।";
   }
 
   @override
   Widget build(BuildContext context) {
-    final dueMembers =
-        members.where((m) => ((m.dueAmount as num?)?.toDouble() ?? 0.0) > 0).toList();
+    final dueMembers = members
+        .where((m) => ((m.dueAmount as num?)?.toDouble() ?? 0.0) > 0)
+        .toList();
     final double totalDueAmount = dueMembers.fold(
       0.0,
       (sum, m) => sum + (((m.dueAmount as num?)?.toDouble() ?? 0.0)),
     );
 
     return AlertDialog(
-      title: const Text("📢 বকেয়া রিমাইন্ডার ও নোটিশ"),
+      title: const Text("📢 বকেয়া রিমাইন্ডার ও নোটিশ"),
       content: SizedBox(
         width: double.maxFinite,
         child: Column(
@@ -87,7 +61,7 @@ class DueReminderDialog extends StatelessWidget {
                 border: Border.all(color: Colors.red.shade200),
               ),
               child: Text(
-                "মোট বকেয়া সদস্য: ${dueMembers.length} জন | মোট বকেয়া: ৳${totalDueAmount.toStringAsFixed(2)}",
+                "মোট বকেয়া সদস্য: ${dueMembers.length} জন | মোট বকেয়া: ৳${totalDueAmount.toStringAsFixed(2)}",
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   color: Colors.red,
@@ -100,7 +74,7 @@ class DueReminderDialog extends StatelessWidget {
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 20),
                 child: Center(
-                  child: Text("বর্তমানে কোনো সদস্যের বকেয়া নেই।"),
+                  child: Text("বর্তমানে কোনো সদস্যের বকেয়া নেই।"),
                 ),
               )
             else
@@ -113,8 +87,10 @@ class DueReminderDialog extends StatelessWidget {
                     final String name = m.name.toString();
                     final String id = m.id.toString();
                     final String mobile = m.mobile.toString();
-                    final double dueAmount = ((m.dueAmount as num?)?.toDouble() ?? 0.0);
-                    final int dueMonthsCount = ((m.dueMonthsCount as num?)?.toInt() ?? 0);
+                    final double dueAmount =
+                        ((m.dueAmount as num?)?.toDouble() ?? 0.0);
+                    final int dueMonthsCount =
+                        ((m.dueMonthsCount as num?)?.toInt() ?? 0);
                     final reminderText = _buildReminderText(
                       name,
                       dueAmount,
@@ -137,7 +113,7 @@ class DueReminderDialog extends StatelessWidget {
                             ),
                             Text("মোবাইল: $mobile"),
                             Text(
-                              "বকেয়া: ৳${dueAmount.toStringAsFixed(2)} ($dueMonthsCount মাস)",
+                              "বকেয়া: ৳${dueAmount.toStringAsFixed(2)} ($dueMonthsCount মাস)",
                               style: const TextStyle(
                                 color: Colors.red,
                                 fontWeight: FontWeight.bold,
@@ -156,7 +132,7 @@ class DueReminderDialog extends StatelessWidget {
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         SnackBar(
                                           content: Text(
-                                            "$name-এর নোটিশ কপি হয়েছে!",
+                                            "$name-এর নোটিশ কপি হয়েছে!",
                                           ),
                                         ),
                                       );
