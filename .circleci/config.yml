@@ -23,6 +23,7 @@ jobs:
             export PATH="$HOME/flutter/bin:$PATH"
             flutter clean
             flutter pub get
+            dart run flutter_launcher_icons
 
       - run:
           name: Build APK Release
