@@ -1,0 +1,59 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+class SmsHelper {
+  /// এক ক্লিকে সরাসরি ফোনের ডিফল্ট SMS অ্যাপ ওপেন করে (নম্বর + মেসেজ বডিসহ)
+  static Future<void> openDirectSms({
+    required BuildContext context,
+    required String phoneNumber,
+    required String message,
+  }) async {
+    final String cleanPhone =
+        phoneNumber.replaceAll(RegExp(r'[^0-9+]'), '').trim();
+
+    if (cleanPhone.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('সদস্যের সঠিক মোবাইল নম্বর পাওয়া যায়নি।')),
+        );
+      }
+      return;
+    }
+
+    final Uri smsUri = Uri(
+      scheme: 'sms',
+      path: cleanPhone,
+      queryParameters: message.trim().isNotEmpty ? {'body': message} : null,
+    );
+
+    try {
+      final bool launched = await launchUrl(
+        smsUri,
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!launched && context.mounted) {
+        await Clipboard.setData(ClipboardData(text: message));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'SMS অ্যাপ ওপেন হয়নি। মেসেজটি ক্লিপবোর্ডে কপি করা হয়েছে।',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        await Clipboard.setData(ClipboardData(text: message));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'SMS অ্যাপ ওপেন হয়নি। মেসেজটি ক্লিপবোর্ডে কপি করা হয়েছে।',
+            ),
+          ),
+        );
+      }
+    }
+  }
+}
