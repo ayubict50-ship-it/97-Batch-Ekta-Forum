@@ -35,6 +35,6 @@ flutter:
 
 flutter_launcher_icons:
   android: true
-  ios: true
+  ios: false
   image_path: "assets/1024.jpg"
   min_sdk_android: 21
