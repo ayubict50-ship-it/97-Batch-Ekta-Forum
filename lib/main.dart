@@ -669,7 +669,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           double monthlyDepositTotal = 0.0;
           int monthlyDepositCount = 0;
           double monthlyProfitTotal = 0.0;
-         List > memberMonthEntries = [];
+     var memberMonthEntries = [];
           for (var member in globalMembers) {
             for (var tx in member.transactions) {
               if (tx.status == 'approved' &&
