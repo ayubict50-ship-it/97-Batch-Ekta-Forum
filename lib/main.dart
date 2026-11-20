@@ -2577,6 +2577,31 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       label: const Text("মাসিক রিপোর্ট (যেকোনো মাস ও PDF)", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                     ),
                   ),
+                  const SizedBox(height: 6),
+SizedBox(
+  width: double.infinity,
+  child: ElevatedButton.icon(
+    style: ElevatedButton.styleFrom(
+      backgroundColor: Colors.red.shade700,
+      foregroundColor: Colors.white,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+    ),
+    onPressed: () {
+      showDialog(
+        context: context,
+        builder: (ctx) => DueReminderDialog(
+          societyName: globalSocietyName,
+          members: globalMembers,
+        ),
+      );
+    },
+    icon: const Icon(Icons.notifications_active, size: 16),
+    label: const Text(
+      "বকেয়া রিমাইন্ডার ও নোটিশ",
+      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+    ),
+  ),
+),
                 ],
               ),
             ),
