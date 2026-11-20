@@ -30,8 +30,8 @@ flutter:
     - family: NikoshBAN
       fonts:
         - asset: assets/fonts/NikoshBAN.ttf
-  flutter_launcher_icons:
-    android: true
-    ios: true
-    image_path: "assets/1024.jpg"
-    min_sdk_android: 21
+ flutter_launcher_icons:
+   android: true
+   ios: true
+   image_path: "assets/1024.jpg"
+   min_sdk_android: 21
