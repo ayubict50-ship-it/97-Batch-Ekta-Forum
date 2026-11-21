@@ -1802,7 +1802,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     );
   }
 
-  Future<void> _executeReverseProfit() async {
+Future<void> _executeReverseProfit() async {
     if (lastDistributionBatchId == null) return;
     String targetBatch = lastDistributionBatchId!;
 
@@ -1827,21 +1827,15 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         }
       }
 
-      String? previousBatch;
-      for (var record in globalBusinessRecords.reversed) {
-        if (record.isSettled && record.batchId != null) {
-          previousBatch = record.batchId;
-          break;
-        }
-      }
-      lastDistributionBatchId = previousBatch;
+      // আগের ব্যাচগুলো লক থাকবে; সর্বশেষ ব্যাচ রিভার্স হওয়ার পর আর কোনো রিভার্স নয়
+      lastDistributionBatchId = null;
     });
 
     await CloudDatabaseService.syncAllDataToCloud();
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("সর্বশেষ লাভ বণ্টন সফলভাবে রিভার্স করা হয়েছে এবং পূর্বের হিসাব ফিরে এসেছে!")),
+        const SnackBar(content: Text("সর্বশেষ লাভ বণ্টন সফলভাবে রিভার্স করা হয়েছে!")),
       );
     }
   }
