@@ -58,10 +58,10 @@ class InstallmentSlab {
       };
 
   factory InstallmentSlab.fromJson(Map<String, dynamic> json) => InstallmentSlab(
-        id: json['id'],
-        startDate: DateTime.parse(json['startDate']),
-        endDate: DateTime.parse(json['endDate']),
-        amount: (json['amount'] as num).toDouble(),
+        id: json['id']?.toString() ?? '',
+        startDate: DateTime.parse(json['startDate'].toString()),
+        endDate: DateTime.parse(json['endDate'].toString()),
+        amount: ((json['amount'] ?? 0) as num).toDouble(),
       );
 }
 
@@ -127,13 +127,13 @@ class BusinessRecord {
       };
 
   factory BusinessRecord.fromJson(Map<String, dynamic> json) => BusinessRecord(
-        id: json['id'],
-        title: json['title'],
-        amount: (json['amount'] as num).toDouble(),
-        isIncome: json['isIncome'],
-        date: DateTime.parse(json['date']),
+        id: json['id']?.toString() ?? '',
+        title: json['title']?.toString() ?? '',
+        amount: ((json['amount'] ?? 0) as num).toDouble(),
+        isIncome: json['isIncome'] == true,
+        date: DateTime.parse(json['date'].toString()),
         isSettled: json['isSettled'] ?? false,
-        batchId: json['batchId'],
+        batchId: json['batchId']?.toString(),
       );
 }
 
@@ -167,13 +167,13 @@ class TransactionHistory {
       };
 
   factory TransactionHistory.fromJson(Map<String, dynamic> json) => TransactionHistory(
-        date: DateTime.parse(json['date']),
-        amount: (json['amount'] as num).toDouble(),
-        paymentMethod: json['paymentMethod'],
-        trxId: json['trxId'] ?? '',
+        date: DateTime.parse(json['date'].toString()),
+        amount: ((json['amount'] ?? 0) as num).toDouble(),
+        paymentMethod: json['paymentMethod']?.toString() ?? '',
+        trxId: json['trxId']?.toString() ?? '',
         isProfit: json['isProfit'] ?? false,
-        batchId: json['batchId'],
-        status: json['status'] ?? 'approved',
+        batchId: json['batchId']?.toString(),
+        status: json['status']?.toString() ?? 'approved',
       );
 }
 
@@ -248,16 +248,33 @@ class Member {
         'transactions': transactions.map((t) => t.toJson()).toList(),
       };
 
-  factory Member.fromJson(Map<String, dynamic> json) => Member(
-        id: json['id'],
-        name: json['name'],
-        mobile: json['mobile'],
-        pin: json['pin'],
-        deposit: (json['deposit'] as num).toDouble(),
-        profitEarned: (json['profitEarned'] as num).toDouble(),
-        joinDate: DateTime.parse(json['joinDate']),
-        transactions: (json['transactions'] as List).map((t) => TransactionHistory.fromJson(t)).toList(),
-      );
+  factory Member.fromJson(Map<String, dynamic> json) {
+    List<TransactionHistory> parsedTx = [];
+    if (json['transactions'] is List) {
+      for (var t in (json['transactions'] as List)) {
+        try {
+          if (t is Map<String, dynamic>) {
+            parsedTx.add(TransactionHistory.fromJson(t));
+          } else if (t is Map) {
+            parsedTx.add(TransactionHistory.fromJson(Map<String, dynamic>.from(t)));
+          }
+        } catch (e) {
+          debugPrint("Transaction parse error: $e");
+        }
+      }
+    }
+
+    return Member(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      mobile: json['mobile']?.toString() ?? '',
+      pin: json['pin']?.toString() ?? '',
+      deposit: ((json['deposit'] ?? 0) as num).toDouble(),
+      profitEarned: ((json['profitEarned'] ?? 0) as num).toDouble(),
+      joinDate: json['joinDate'] != null ? DateTime.parse(json['joinDate'].toString()) : DateTime(2019, 1, 1),
+      transactions: parsedTx,
+    );
+  }
 }
 
 List<Member> globalMembers = [];
@@ -289,36 +306,99 @@ class CloudDatabaseService {
     }
   }
 
-  static Future<void> loadDataFromCloud() async {
+  static Future<bool> loadDataFromCloud() async {
+    bool anyLoaded = false;
+
     try {
       var membersDoc = await _db.collection('society_data').doc('members').get();
       if (membersDoc.exists && membersDoc.data()?['list'] != null) {
         List l = membersDoc.data()!['list'];
-        globalMembers = l.map((m) => Member.fromJson(m)).toList();
+        List<Member> parsedMembers = [];
+        for (var item in l) {
+          try {
+            if (item is Map<String, dynamic>) {
+              parsedMembers.add(Member.fromJson(item));
+            } else if (item is Map) {
+              parsedMembers.add(Member.fromJson(Map<String, dynamic>.from(item)));
+            }
+          } catch (e) {
+            debugPrint("Member parse error: $e");
+          }
+        }
+        if (parsedMembers.isNotEmpty || l.isEmpty) {
+          globalMembers = parsedMembers;
+          anyLoaded = true;
+        }
       }
+    } catch (e) {
+      debugPrint("Members Cloud Load Error: $e");
+    }
 
+    try {
       var bizDoc = await _db.collection('society_data').doc('business').get();
       if (bizDoc.exists && bizDoc.data()?['list'] != null) {
         List l = bizDoc.data()!['list'];
-        globalBusinessRecords = l.map((b) => BusinessRecord.fromJson(b)).toList();
+        List<BusinessRecord> parsedBiz = [];
+        for (var item in l) {
+          try {
+            if (item is Map<String, dynamic>) {
+              parsedBiz.add(BusinessRecord.fromJson(item));
+            } else if (item is Map) {
+              parsedBiz.add(BusinessRecord.fromJson(Map<String, dynamic>.from(item)));
+            }
+          } catch (e) {
+            debugPrint("Business parse error: $e");
+          }
+        }
+        if (parsedBiz.isNotEmpty || l.isEmpty) {
+          globalBusinessRecords = parsedBiz;
+          anyLoaded = true;
+        }
       }
+    } catch (e) {
+      debugPrint("Business Cloud Load Error: $e");
+    }
 
+    try {
       var slabDoc = await _db.collection('society_data').doc('slabs').get();
       if (slabDoc.exists && slabDoc.data()?['list'] != null) {
         List l = slabDoc.data()!['list'];
-        globalInstallmentSlabs = l.map((s) => InstallmentSlab.fromJson(s)).toList();
-      }
-
-      var settingsDoc = await _db.collection('society_data').doc('settings').get();
-      if (settingsDoc.exists) {
-        globalSocietyName = settingsDoc.data()?['societyName'] ?? globalSocietyName;
-        globalAdminId = settingsDoc.data()?['adminId'] ?? globalAdminId;
-        globalAdminPassword = settingsDoc.data()?['adminPassword'] ?? globalAdminPassword;
-        lastDistributionBatchId = settingsDoc.data()?['lastDistributionBatchId'];
+        List<InstallmentSlab> parsedSlabs = [];
+        for (var item in l) {
+          try {
+            if (item is Map<String, dynamic>) {
+              parsedSlabs.add(InstallmentSlab.fromJson(item));
+            } else if (item is Map) {
+              parsedSlabs.add(InstallmentSlab.fromJson(Map<String, dynamic>.from(item)));
+            }
+          } catch (e) {
+            debugPrint("Slab parse error: $e");
+          }
+        }
+        if (parsedSlabs.isNotEmpty) {
+          globalInstallmentSlabs = parsedSlabs;
+          anyLoaded = true;
+        }
       }
     } catch (e) {
-      debugPrint("Cloud Load Error: $e");
+      debugPrint("Slabs Cloud Load Error: $e");
     }
+
+    try {
+      var settingsDoc = await _db.collection('society_data').doc('settings').get();
+      if (settingsDoc.exists && settingsDoc.data() != null) {
+        final data = settingsDoc.data()!;
+        globalSocietyName = data['societyName'] ?? globalSocietyName;
+        globalAdminId = data['adminId'] ?? globalAdminId;
+        globalAdminPassword = data['adminPassword'] ?? globalAdminPassword;
+        lastDistributionBatchId = data['lastDistributionBatchId'];
+        anyLoaded = true;
+      }
+    } catch (e) {
+      debugPrint("Settings Cloud Load Error: $e");
+    }
+
+    return anyLoaded;
   }
 }
 
@@ -432,7 +512,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _initApp() async {
     try {
-      await CloudDatabaseService.loadDataFromCloud().timeout(const Duration(seconds: 8));
+      await CloudDatabaseService.loadDataFromCloud().timeout(const Duration(seconds: 15));
     } catch (e) {
       debugPrint("Startup Load Error: $e");
     }
@@ -903,9 +983,11 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                         });
                                         await CloudDatabaseService.syncAllDataToCloud();
                                         setDialogState(() {});
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text("পেমেন্টটি বাতিল করা হয়েছে!")),
-                                        );
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text("পেমেন্টটি বাতিল করা হয়েছে!")),
+                                          );
+                                        }
                                       },
                                       icon: const Icon(Icons.close, size: 16),
                                       label: const Text("বাতিল"),
@@ -1524,9 +1606,11 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                                   });
                                                   await CloudDatabaseService.syncAllDataToCloud();
                                                   setDialogState(() {});
-                                                  ScaffoldMessenger.of(context).showSnackBar(
-                                                    SnackBar(content: Text("${record.title} মুছে ফেলা হয়েছে!")),
-                                                  );
+                                                  if (mounted) {
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      SnackBar(content: Text("${record.title} মুছে ফেলা হয়েছে!")),
+                                                    );
+                                                  }
                                                 },
                                                 tooltip: "এন্ট্রি ডিলিট করুন",
                                               ),
@@ -1802,7 +1886,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     );
   }
 
-Future<void> _executeReverseProfit() async {
+  Future<void> _executeReverseProfit() async {
     if (lastDistributionBatchId == null) return;
     String targetBatch = lastDistributionBatchId!;
 
