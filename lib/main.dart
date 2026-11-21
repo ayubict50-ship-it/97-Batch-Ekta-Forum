@@ -36,6 +36,7 @@ void main() async {
 String globalSocietyName = '৯৭ ব্যাচ একতা ফোরাম';
 String globalAdminId = 'admin';
 String globalAdminPassword = '1234';
+const String globalAdminRecoveryCode = '97EKTA';
 
 class InstallmentSlab {
   final String id;
@@ -552,6 +553,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _idController = TextEditingController();
   final TextEditingController _pinController = TextEditingController();
   bool _isAdmin = true;
+  bool _obscureLoginPin = true;
 
   void _handleLogin() {
     String inputId = _idController.text.trim();
@@ -584,6 +586,253 @@ class _LoginScreenState extends State<LoginScreen> {
           const SnackBar(content: Text("সঠিক সদস্য আইডি/মোবাইল এবং পিন দিন!")),
         );
       }
+    }
+  }
+
+  void _showForgotPasswordOrPinDialog() {
+    if (_isAdmin) {
+      final adminIdVerifyController = TextEditingController(text: _idController.text.trim());
+      final recoveryCodeController = TextEditingController();
+      final newPassController = TextEditingController();
+      final confirmPassController = TextEditingController();
+      bool obscureNewPass = true;
+
+      showDialog(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text("🔐 ম্যানেজার পাসওয়ার্ড রিসেট"),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "বর্তমান ম্যানেজার আইডি অথবা রিকভারি কোড (97EKTA) দিয়ে নতুন পাসওয়ার্ড সেট করুন।",
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: adminIdVerifyController,
+                      decoration: const InputDecoration(
+                        labelText: "বর্তমান ম্যানেজার আইডি",
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.person),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: recoveryCodeController,
+                      decoration: const InputDecoration(
+                        labelText: "রিকভারি কোড (ঐচ্ছিক, যদি আইডি না জানেন)",
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.verified_user),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: newPassController,
+                      obscureText: obscureNewPass,
+                      decoration: InputDecoration(
+                        labelText: "নতুন পাসওয়ার্ড / পিন",
+                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.lock_reset),
+                        suffixIcon: IconButton(
+                          icon: Icon(obscureNewPass ? Icons.visibility : Icons.visibility_off),
+                          onPressed: () => setDialogState(() => obscureNewPass = !obscureNewPass),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: confirmPassController,
+                      obscureText: obscureNewPass,
+                      decoration: const InputDecoration(
+                        labelText: "নতুন পাসওয়ার্ড নিশ্চিত করুন",
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.lock_outline),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                  onPressed: () async {
+                    String enteredId = adminIdVerifyController.text.trim();
+                    String enteredCode = recoveryCodeController.text.trim();
+                    String newPass = newPassController.text.trim();
+                    String confirmPass = confirmPassController.text.trim();
+
+                    bool isAuthorized = (enteredId.isNotEmpty && enteredId == globalAdminId) ||
+                        (enteredCode.isNotEmpty && enteredCode == globalAdminRecoveryCode);
+
+                    if (!isAuthorized) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("সঠিক ম্যানেজার আইডি বা রিকভারি কোড দিন!")),
+                      );
+                      return;
+                    }
+
+                    if (newPass.isEmpty || newPass != confirmPass) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("নতুন পাসওয়ার্ড দিন এবং উভয় ঘরে একই পাসওয়ার্ড লিখুন!")),
+                      );
+                      return;
+                    }
+
+                    setState(() {
+                      globalAdminPassword = newPass;
+                      _idController.text = globalAdminId;
+                      _pinController.text = newPass;
+                    });
+                    await CloudDatabaseService.syncAllDataToCloud();
+                    if (mounted) {
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("ম্যানেজার পাসওয়ার্ড সফলভাবে রিসেট ও ক্লাউডে সেভ হয়েছে!")),
+                      );
+                    }
+                  },
+                  child: const Text("পাসওয়ার্ড রিসেট করুন"),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    } else {
+      final memberLookupController = TextEditingController(text: _idController.text.trim());
+      final memberMobileVerifyController = TextEditingController();
+      final newPinController = TextEditingController();
+      final confirmPinController = TextEditingController();
+      bool obscureNewPin = true;
+
+      showDialog(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text("🔑 সদস্য পিন রিসেট"),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "আপনার সদস্য আইডি/মোবাইল নম্বর এবং রেজিস্টার্ড মোবাইল নম্বর মিলিয়ে নতুন পিন সেট করুন।",
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: memberLookupController,
+                      decoration: const InputDecoration(
+                        labelText: "সদস্য আইডি বা মোবাইল নম্বর",
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.badge),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: memberMobileVerifyController,
+                      keyboardType: TextInputType.phone,
+                      decoration: const InputDecoration(
+                        labelText: "রেজিস্টার্ড মোবাইল নম্বর যাচাই",
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.phone_android),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: newPinController,
+                      obscureText: obscureNewPin,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: "নতুন পিন দিন",
+                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.vpn_key),
+                        suffixIcon: IconButton(
+                          icon: Icon(obscureNewPin ? Icons.visibility : Icons.visibility_off),
+                          onPressed: () => setDialogState(() => obscureNewPin = !obscureNewPin),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: confirmPinController,
+                      obscureText: obscureNewPin,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: "নতুন পিন নিশ্চিত করুন",
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.lock_outline),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বাতিল")),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                  onPressed: () async {
+                    String lookup = memberLookupController.text.trim();
+                    String verifyMobile = memberMobileVerifyController.text.trim();
+                    String newPin = newPinController.text.trim();
+                    String confirmPin = confirmPinController.text.trim();
+
+                    if (lookup.isEmpty || verifyMobile.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("সদস্য আইডি/মোবাইল এবং রেজিস্টার্ড মোবাইল নম্বর দিন!")),
+                      );
+                      return;
+                    }
+
+                    Member? matchedMember;
+                    for (var m in globalMembers) {
+                      if ((m.id == lookup || m.mobile == lookup) && m.mobile == verifyMobile) {
+                        matchedMember = m;
+                        break;
+                      }
+                    }
+
+                    if (matchedMember == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("সদস্যের তথ্য বা রেজিস্টার্ড মোবাইল নম্বর মেলেনি!")),
+                      );
+                      return;
+                    }
+
+                    if (newPin.isEmpty || newPin != confirmPin) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("নতুন পিন দিন এবং উভয় ঘরে একই পিন লিখুন!")),
+                      );
+                      return;
+                    }
+
+                    setState(() {
+                      matchedMember!.pin = newPin;
+                      _idController.text = matchedMember.mobile;
+                      _pinController.text = newPin;
+                    });
+                    await CloudDatabaseService.syncAllDataToCloud();
+                    if (mounted) {
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("${matchedMember.name}-এর নতুন পিন সেট ও ক্লাউডে সেভ হয়েছে!")),
+                      );
+                    }
+                  },
+                  child: const Text("পিন রিসেট করুন"),
+                ),
+              ],
+            );
+          },
+        ),
+      );
     }
   }
 
@@ -645,11 +894,19 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 15),
                 TextField(
                   controller: _pinController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
+                  obscureText: _obscureLoginPin,
+                  decoration: InputDecoration(
                     labelText: "পাসওয়ার্ড / পিন",
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.lock),
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.lock),
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscureLoginPin ? Icons.visibility : Icons.visibility_off),
+                      onPressed: () {
+                        setState(() {
+                          _obscureLoginPin = !_obscureLoginPin;
+                        });
+                      },
+                    ),
                   ),
                 ),
                 const SizedBox(height: 25),
@@ -663,6 +920,15 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     onPressed: _handleLogin,
                     child: const Text("লগইন করুন", style: TextStyle(fontSize: 18)),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextButton.icon(
+                  onPressed: _showForgotPasswordOrPinDialog,
+                  icon: const Icon(Icons.help_outline, size: 18, color: Colors.teal),
+                  label: Text(
+                    _isAdmin ? "ম্যানেজার পাসওয়ার্ড ভুলে গেছেন? রিসেট করুন" : "সদস্য পিন ভুলে গেছেন? রিসেট করুন",
+                    style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold),
                   ),
                 ),
               ],
