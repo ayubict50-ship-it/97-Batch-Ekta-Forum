@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SmsHelper {
-  /// এক ক্লিকে সরাসরি ফোনের ডিফল্ট SMS অ্যাপ ওপেন করে (নম্বর + মেসেজ বডিসহ)
+  /// সরাসরি ডিফল্ট SMS অ্যাপ ওপেন করে (নম্বর + মেসেজ বডিসহ)
   static Future<void> openDirectSms({
     required BuildContext context,
     required String phoneNumber,
@@ -21,15 +21,16 @@ class SmsHelper {
       return;
     }
 
-    final Uri smsUri = Uri(
-      scheme: 'sms',
-      path: cleanPhone,
-      queryParameters: message.trim().isNotEmpty ? {'body': message} : null,
+    final String encodedBody = Uri.encodeComponent(message);
+    final Uri smsToUri = Uri.parse(
+      message.trim().isNotEmpty
+          ? 'smsto:$cleanPhone?body=$encodedBody'
+          : 'smsto:$cleanPhone',
     );
 
     try {
       final bool launched = await launchUrl(
-        smsUri,
+        smsToUri,
         mode: LaunchMode.externalApplication,
       );
 
