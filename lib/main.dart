@@ -13,6 +13,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:open_file/open_file.dart';
 import 'due_reminder_feature.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -2578,30 +2579,30 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                     ),
                   ),
                   const SizedBox(height: 6),
-SizedBox(
-  width: double.infinity,
-  child: ElevatedButton.icon(
-    style: ElevatedButton.styleFrom(
-      backgroundColor: Colors.red.shade700,
-      foregroundColor: Colors.white,
-      padding: const EdgeInsets.symmetric(vertical: 8),
-    ),
-    onPressed: () {
-      showDialog(
-        context: context,
-        builder: (ctx) => DueReminderDialog(
-          societyName: globalSocietyName,
-          members: globalMembers,
-        ),
-      );
-    },
-    icon: const Icon(Icons.notifications_active, size: 16),
-    label: const Text(
-      "বকেয়া রিমাইন্ডার ও নোটিশ",
-      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-    ),
-  ),
-),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red.shade700,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (ctx) => DueReminderDialog(
+                            societyName: globalSocietyName,
+                            members: globalMembers,
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.notifications_active, size: 16),
+                      label: const Text(
+                        "বকেয়া রিমাইন্ডার ও নোটিশ",
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -2849,16 +2850,19 @@ class _MemberDashboardState extends State<MemberDashboard> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text("সোনালী ব্যাংক পিএলসি:", style: TextStyle(fontSize: 12, color: Colors.blue, fontWeight: FontWeight.bold)),
-                          const Text("অ্যাকাউন্ট নম্বর:", style: TextStyle(fontSize: 12)),
+                          const Text("Bank: Sonali Bank PLC", style: TextStyle(fontSize: 13, color: Colors.blue, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 4),
+                          const Text("Account Name: 97 Batch Akata Foram", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 4),
+                          const Text("Account Number:", style: TextStyle(fontSize: 12)),
                           Row(
                             children: [
-                              const SelectableText("0204801010355", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)),
+                              const SelectableText("0204801011895", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)),
                               const Spacer(),
                               IconButton(
                                 icon: const Icon(Icons.copy, size: 20, color: Colors.blue),
                                 onPressed: () {
-                                  Clipboard.setData(const ClipboardData(text: "0204801010355"));
+                                  Clipboard.setData(const ClipboardData(text: "0204801011895"));
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(content: Text("ব্যাংক অ্যাকাউন্ট নম্বর কপি করা হয়েছে!")),
                                   );
@@ -2866,6 +2870,7 @@ class _MemberDashboardState extends State<MemberDashboard> {
                               )
                             ],
                           ),
+                          const Text("Branch: Bhawal Jamalpur Branch", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                         ],
                       ),
                     ),
