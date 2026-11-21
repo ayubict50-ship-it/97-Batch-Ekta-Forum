@@ -234,8 +234,45 @@ class Member {
 
   int get dueMonthsCount {
     if (dueAmount <= 0 || globalInstallmentSlabs.isEmpty) return 0;
-    double currentRate = globalInstallmentSlabs.last.amount;
-    return (dueAmount / currentRate).ceil();
+
+    DateTime now = DateTime.now();
+    double remainingDue = dueAmount;
+    int countedMonths = 0;
+
+    // স্লাবগুলো শেষ থেকে শুরুর দিকে (সাম্প্রতিক মাস থেকে পেছনে) হিসাব করা হচ্ছে
+    for (var slab in globalInstallmentSlabs.reversed) {
+      if (remainingDue <= 0) break;
+      if (slab.amount <= 0) continue;
+
+      DateTime effectiveStart = joinDate.isAfter(slab.startDate) ? joinDate : slab.startDate;
+      DateTime effectiveEnd = now.isBefore(slab.endDate) ? now : slab.endDate;
+
+      if (effectiveStart.isBefore(effectiveEnd) || effectiveStart.isAtSameMomentAs(effectiveEnd)) {
+        int slabMonths = (effectiveEnd.year - effectiveStart.year) * 12 + (effectiveEnd.month - effectiveStart.month);
+        if (slabMonths < 0) {
+          slabMonths = 0;
+        } else {
+          slabMonths += 1;
+        }
+
+        double maxSlabValue = slabMonths * slab.amount;
+        if (remainingDue >= maxSlabValue) {
+          countedMonths += slabMonths;
+          remainingDue -= maxSlabValue;
+        } else {
+          int partialMonths = (remainingDue / slab.amount).ceil();
+          countedMonths += partialMonths;
+          remainingDue = 0.0;
+        }
+      }
+    }
+
+    if (remainingDue > 0) {
+      double fallbackRate = globalInstallmentSlabs.last.amount > 0 ? globalInstallmentSlabs.last.amount : 1.0;
+      countedMonths += (remainingDue / fallbackRate).ceil();
+    }
+
+    return countedMonths;
   }
 
   Map<String, dynamic> toJson() => {
