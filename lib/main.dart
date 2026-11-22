@@ -236,44 +236,29 @@ class Member {
     if (dueAmount <= 0 || globalInstallmentSlabs.isEmpty) return 0;
 
     DateTime now = DateTime.now();
+    double remainingDeposit = deposit > 0 ? deposit : 0.0;
+    int totalDueMonths = 0;
 
-    // কোনো জমা না থাকলে (এবং পুরো টার্গেট বকেয়া থাকলে) চলমান মাস পর্যন্ত মোট কার্যকর মাস (যেমন ৯৫ মাস) দেখানো হবে
-    if (deposit <= 0 && dueAmount >= expectedTotalTarget) {
-      int totalActiveMonths = 0;
-      for (var slab in globalInstallmentSlabs) {
-        totalActiveMonths += _effectiveSlabMonths(slab, now);
-      }
-      return totalActiveMonths;
-    }
-
-    double remainingDue = dueAmount;
-    int countedMonths = 0;
-
-    // স্লাবগুলো শেষ থেকে শুরুর দিকে (চলমান মাস থেকে পেছনে) পূর্ণ কিস্তির মাসে হিসাব করা হচ্ছে
-    for (var slab in globalInstallmentSlabs.reversed) {
-      if (remainingDue <= 0) break;
-      if (slab.amount <= 0) continue;
-
+    // শুরু থেকে স্লাব ধরে জমা সমন্বয় করে প্রতিটি স্লাবের অবশিষ্ট বকেয়া মাস যোগ করা হচ্ছে (যেমন: ৫৮ + ৩৫ = ৯৩ মাস)
+    for (var slab in globalInstallmentSlabs) {
       int slabMonths = _effectiveSlabMonths(slab, now);
       if (slabMonths <= 0) continue;
 
-      double maxSlabValue = slabMonths * slab.amount;
-      if (remainingDue >= maxSlabValue) {
-        countedMonths += slabMonths;
-        remainingDue -= maxSlabValue;
+      double slabTotalAmount = slabMonths * slab.amount;
+      if (remainingDeposit >= slabTotalAmount) {
+        remainingDeposit -= slabTotalAmount;
       } else {
-        int fullMonths = (remainingDue / slab.amount).floor();
-        countedMonths += fullMonths;
-        remainingDue = double.parse((remainingDue - (fullMonths * slab.amount)).toStringAsFixed(2));
+        double remainingSlabDueAmount = slabTotalAmount - remainingDeposit;
+        remainingDeposit = 0.0;
+        if (slab.amount > 0) {
+          totalDueMonths += (remainingSlabDueAmount / slab.amount).floor();
+        } else {
+          totalDueMonths += slabMonths;
+        }
       }
     }
 
-    if (remainingDue > 0) {
-      double fallbackRate = globalInstallmentSlabs.last.amount > 0 ? globalInstallmentSlabs.last.amount : 1.0;
-      countedMonths += (remainingDue / fallbackRate).floor();
-    }
-
-    return countedMonths;
+    return totalDueMonths;
   }
 
   Map<String, dynamic> toJson() => {
