@@ -445,12 +445,13 @@ class SamobayFinance {
   }
 }
 
-/// RepaintBoundary দিয়ে রিপোর্ট অংশকে PNG ইমেজে রূপান্তর করে PDF ফাইলে সেভ ও ওপেন করার ফাংশন
+/// RepaintBoundary দিয়ে রিপোর্ট অংশকে PNG ইমেজে রূপান্তর করে ৮–১০ এন্ট্রি পরপর আলাদা পেইজে PDF সেভ ও ওপেন করার ফাংশন
 Future<void> exportBoundaryToPdf(
   BuildContext context,
   GlobalKey boundaryKey,
-  String fileName,
-) async {
+  String fileName, {
+  int itemsPerPage = 9,
+}) async {
   try {
     final RenderRepaintBoundary? boundary =
         boundaryKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
@@ -464,7 +465,7 @@ Future<void> exportBoundaryToPdf(
       return;
     }
 
-    final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+    final ui.Image image = await boundary.toImage(pixelRatio: 2.5);
     final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
 
     if (byteData == null) {
@@ -472,23 +473,102 @@ Future<void> exportBoundaryToPdf(
     }
 
     final Uint8List pngBytes = byteData.buffer.asUint8List();
-    final pw.Document pdf = pw.Document();
-    final pw.MemoryImage pdfImage = pw.MemoryImage(pngBytes);
+    final ui.Codec codec = await ui.instantiateImageCodec(pngBytes);
+    final ui.FrameInfo frameInfo = await codec.getNextFrame();
+    final ui.Image decodedImage = frameInfo.image;
 
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(16),
-        build: (pw.Context pdfContext) {
-          return pw.Center(
-            child: pw.Image(
-              pdfImage,
-              fit: pw.BoxFit.contain,
-            ),
+    final int totalWidth = decodedImage.width;
+    final int totalHeight = decodedImage.height;
+
+    final pw.Document pdf = pw.Document();
+    final double printableWidthPt = PdfPageFormat.a4.availableWidth;
+    final double printableHeightPt = PdfPageFormat.a4.availableHeight;
+
+    // ৮–১০টি এন্ট্রি পরপর আলাদা পেইজে ভাগ করার জন্য প্রতি পেইজের আনুমানিক উচ্চতা নির্ধারণ
+    final int safePerPage = itemsPerPage < 8 ? 8 : (itemsPerPage > 10 ? 10 : itemsPerPage);
+    final double estimatedRowHeightPt = 58.0;
+    final double targetChunkHeightPt = (safePerPage * estimatedRowHeightPt).clamp(260.0, printableHeightPt);
+    final double scalePtPerPx = printableWidthPt / totalWidth;
+    final int sliceHeightPx = (targetChunkHeightPt / scalePtPerPx).round().clamp(1, totalHeight);
+
+    final ui.PictureRecorder recorder = ui.PictureRecorder();
+    final Canvas canvas = Canvas(recorder);
+
+    int currentY = 0;
+    int pageNumber = 1;
+    final int totalPages = (totalHeight / sliceHeightPx).ceil().clamp(1, 999);
+
+    while (currentY < totalHeight) {
+      final int currentSliceHeight = (currentY + sliceHeightPx > totalHeight)
+          ? (totalHeight - currentY)
+          : sliceHeightPx;
+
+      final ui.PictureRecorder pageRecorder = ui.PictureRecorder();
+      final Canvas pageCanvas = Canvas(pageRecorder);
+      pageCanvas.drawColor(Colors.white, BlendMode.src);
+
+      final Rect srcRect = Rect.fromLTWH(
+        0,
+        currentY.toDouble(),
+        totalWidth.toDouble(),
+        currentSliceHeight.toDouble(),
+      );
+      final Rect dstRect = Rect.fromLTWH(
+        0,
+        0,
+        totalWidth.toDouble(),
+        currentSliceHeight.toDouble(),
+      );
+      pageCanvas.drawImageRect(decodedImage, srcRect, dstRect, Paint());
+
+      final ui.Image pageImg = await pageRecorder.endRecording().toImage(
+            totalWidth,
+            currentSliceHeight,
           );
-        },
-      ),
-    );
+      final ByteData? pageByteData = await pageImg.toByteData(format: ui.ImageByteFormat.png);
+
+      if (pageByteData != null) {
+        final pw.MemoryImage pageMemoryImage = pw.MemoryImage(pageByteData.buffer.asUint8List());
+        pdf.addPage(
+          pw.Page(
+            pageFormat: PdfPageFormat.a4,
+            margin: const pw.EdgeInsets.all(16),
+            build: (pw.Context pdfContext) {
+              return pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                children: [
+                  pw.Expanded(
+                    child: pw.Align(
+                      alignment: pw.Alignment.topCenter,
+                      child: pw.Image(
+                        pageMemoryImage,
+                        fit: pw.BoxFit.contain,
+                      ),
+                    ),
+                  ),
+                  pw.SizedBox(height: 6),
+                  pw.Align(
+                    alignment: pw.Alignment.centerRight,
+                    child: pw.Text(
+                      'Page $pageNumber of $totalPages',
+                      style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+      }
+
+      currentY += currentSliceHeight;
+      pageNumber++;
+    }
+
+    // recorder ব্যবহার শেষে নিষ্পত্তি
+    canvas.save();
+    canvas.restore();
+    recorder.endRecording().dispose();
 
     Directory? directory;
     if (Platform.isAndroid) {
@@ -505,7 +585,7 @@ Future<void> exportBoundaryToPdf(
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('PDF ফাইল সেভ হয়েছে:\n${file.path}')),
+        SnackBar(content: Text('PDF ফাইল সেভ হয়েছে ($totalPages পেইজ):\n${file.path}')),
       );
     }
 
@@ -1202,6 +1282,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                     context,
                     monthlyBoundaryKey,
                     "Monthly_Report_${selectedMonth}_${selectedYear}.pdf",
+                    itemsPerPage: 9,
                   );
                 },
                 icon: const Icon(Icons.download, size: 16),
@@ -1929,6 +2010,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                     context,
                     bizBoundaryKey,
                     "Business_Ledger_${DateTime.now().millisecondsSinceEpoch}.pdf",
+                    itemsPerPage: 9,
                   );
                 },
                 icon: const Icon(Icons.download, size: 16),
@@ -2577,6 +2659,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 context,
                 memberStatementKey,
                 "Member_${member.name}_Statement.pdf",
+                itemsPerPage: 9,
               );
             },
             icon: const Icon(Icons.download, size: 16),
@@ -2740,6 +2823,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 context,
                 allMembersBoundaryKey,
                 "All_Members_Report.pdf",
+                itemsPerPage: 9,
               );
             },
             icon: const Icon(Icons.download, size: 16),
@@ -3428,6 +3512,7 @@ class _MemberDashboardState extends State<MemberDashboard> {
                     context,
                     _memberDashBoundaryKey,
                     "${widget.member.name}_Statement.pdf",
+                    itemsPerPage: 9,
                   );
                 },
                 icon: const Icon(Icons.download),
