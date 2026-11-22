@@ -14,7 +14,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:open_file/open_file.dart';
 import 'due_reminder_feature.dart';
 import 'net_capital_feature.dart';
-
+import 'pdf_report_generator.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
