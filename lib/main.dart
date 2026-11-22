@@ -241,7 +241,6 @@ class Member {
     double remainingDeposit = deposit > 0 ? deposit : 0.0;
     int totalDueMonths = 0;
 
-    // শুরু থেকে স্লাব ধরে জমা সমন্বয় করে প্রতিটি স্লাবের অবশিষ্ট বকেয়া মাস যোগ করা হচ্ছে (যেমন: ৫৮ + ৩৫ = ৯৩ মাস)
     for (var slab in globalInstallmentSlabs) {
       int slabMonths = _effectiveSlabMonths(slab, now);
       if (slabMonths <= 0) continue;
@@ -447,7 +446,6 @@ class SamobayFinance {
   }
 }
 
-/// RepaintBoundary দিয়ে রিপোর্ট অংশকে PNG ইমেজে রূপান্তর করে কোনো তথ্য না কেটে ৮–১০ এন্ট্রি পরপর আলাদা পেইজে PDF সেভ ও ওপেন করার ফাংশন
 Future<void> exportBoundaryToPdf(
   BuildContext context,
   GlobalKey boundaryKey,
@@ -486,7 +484,6 @@ Future<void> exportBoundaryToPdf(
     final double printableWidthPt = PdfPageFormat.a4.availableWidth;
     final double printableHeightPt = PdfPageFormat.a4.availableHeight;
 
-    // ৮–১০টি এন্ট্রি পরপর আলাদা পেইজে ভাগ করার জন্য প্রতি পেইজের উচ্চতা নির্ধারণ (কোনো তথ্য বাদ না দিয়ে সম্পূর্ণ অংশ ক্রমান্বয়ে যুক্ত হয়)
     final int safePerPage = itemsPerPage < 8 ? 8 : (itemsPerPage > 10 ? 10 : itemsPerPage);
     final double estimatedRowHeightPt = 72.0;
     final double targetChunkHeightPt = (safePerPage * estimatedRowHeightPt).clamp(360.0, printableHeightPt - 28.0);
@@ -1093,7 +1090,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           double monthlyDepositTotal = 0.0;
           int monthlyDepositCount = 0;
           double monthlyProfitTotal = 0.0;
-          List> memberMonthEntries = [];
+          List memberMonthEntries = [];
 
           for (var member in globalMembers) {
             for (var tx in member.transactions) {
@@ -2293,7 +2290,6 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         }
       }
 
-      // আগের ব্যাচগুলো লক থাকবে; সর্বশেষ ব্যাচ রিভার্স হওয়ার পর আর কোনো রিভার্স নয়
       lastDistributionBatchId = null;
     });
 
