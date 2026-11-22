@@ -14,6 +14,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:open_file/open_file.dart';
 import 'due_reminder_feature.dart';
 import 'net_capital_feature.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -3057,6 +3058,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 ],
               ),
             ),
+            NetCapitalSummaryCard(totalMembersSavings: totalCollection),
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Align(
