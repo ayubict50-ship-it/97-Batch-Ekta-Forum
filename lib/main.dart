@@ -15,6 +15,7 @@ import 'package:open_file/open_file.dart';
 import 'due_reminder_feature.dart';
 import 'net_capital_feature.dart';
 import 'pdf_report_generator.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -1092,7 +1093,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           double monthlyDepositTotal = 0.0;
           int monthlyDepositCount = 0;
           double monthlyProfitTotal = 0.0;
-          var memberMonthEntries = [];
+          List> memberMonthEntries = [];
 
           for (var member in globalMembers) {
             for (var tx in member.transactions) {
@@ -1278,11 +1279,19 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
                 onPressed: () async {
-                  await exportBoundaryToPdf(
-                    context,
-                    monthlyBoundaryKey,
-                    "Monthly_Report_${selectedMonth}_${selectedYear}.pdf",
-                    itemsPerPage: 9,
+                  await PdfReportGenerator.generateMonthlyReport(
+                    context: context,
+                    societyName: globalSocietyName,
+                    monthLabel: monthLabel,
+                    selectedMonth: selectedMonth,
+                    selectedYear: selectedYear,
+                    monthlyDepositTotal: monthlyDepositTotal,
+                    monthlyDepositCount: monthlyDepositCount,
+                    monthlyProfitTotal: monthlyProfitTotal,
+                    monthlyBizIncome: monthlyBizIncome,
+                    monthlyBizExpense: monthlyBizExpense,
+                    memberMonthEntries: memberMonthEntries,
+                    monthBizRecords: monthBizRecords,
                   );
                 },
                 icon: const Icon(Icons.download, size: 16),
@@ -2006,11 +2015,13 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
                 onPressed: () async {
-                  await exportBoundaryToPdf(
+                  await PdfReportGenerator.generateBusinessLedgerReport(
                     context,
-                    bizBoundaryKey,
-                    "Business_Ledger_${DateTime.now().millisecondsSinceEpoch}.pdf",
-                    itemsPerPage: 9,
+                    globalSocietyName,
+                    globalBusinessRecords,
+                    SamobayFinance.currentBusinessIncome,
+                    SamobayFinance.currentBusinessExpense,
+                    SamobayFinance.currentNetProfit,
                   );
                 },
                 icon: const Icon(Icons.download, size: 16),
@@ -2655,11 +2666,10 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
             onPressed: () async {
-              await exportBoundaryToPdf(
+              await PdfReportGenerator.generateSingleMemberStatement(
                 context,
-                memberStatementKey,
-                "Member_${member.name}_Statement.pdf",
-                itemsPerPage: 9,
+                globalSocietyName,
+                member,
               );
             },
             icon: const Icon(Icons.download, size: 16),
@@ -2820,11 +2830,10 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
             onPressed: () async {
-              await exportBoundaryToPdf(
+              await PdfReportGenerator.generateAllMembersReport(
                 context,
-                allMembersBoundaryKey,
-                "All_Members_Report.pdf",
-                itemsPerPage: 9,
+                globalSocietyName,
+                globalMembers,
               );
             },
             icon: const Icon(Icons.download, size: 16),
@@ -3512,11 +3521,10 @@ class _MemberDashboardState extends State<MemberDashboard> {
                   foregroundColor: Colors.white,
                 ),
                 onPressed: () async {
-                  await exportBoundaryToPdf(
+                  await PdfReportGenerator.generateSingleMemberStatement(
                     context,
-                    _memberDashBoundaryKey,
-                    "${widget.member.name}_Statement.pdf",
-                    itemsPerPage: 9,
+                    globalSocietyName,
+                    widget.member,
                   );
                 },
                 icon: const Icon(Icons.download),
