@@ -1,6 +1,7 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/rendering.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
@@ -8,42 +9,13 @@ import 'package:pdf/widgets.dart' as pw;
 import 'main.dart';
 
 class PdfReportGenerator {
-  static Future<pw.Font> _loadNikoshFont() async {
-    try {
-      final fontData = await rootBundle.load('assets/fonts/NikoshBAN.ttf');
-      if (fontData.lengthInBytes > 0) {
-        return pw.Font.ttf(fontData);
-      }
-    } catch (e) {
-      debugPrint('NikoshBAN font load error: $e');
-    }
-    return pw.Font.helvetica();
-  }
-
-  static pw.TextStyle _bnStyle(
-    pw.Font font, {
-    double fontSize = 10.5,
-    pw.FontWeight fontWeight = pw.FontWeight.normal,
-    PdfColor color = PdfColors.black,
-  }) {
-    return pw.TextStyle(
-      font: font,
-      fontFallback: [font],
-      fontSize: fontSize,
-      fontWeight: fontWeight,
-      color: color,
-      letterSpacing: 0.2,
-      lineSpacing: 1.25,
-    );
-  }
-
   static String _formatDate(DateTime d) {
     return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
   }
 
-  static Future<void> _saveAndOpenPdf(
+  static Future<void> _savePdfBytes(
     BuildContext context,
-    pw.Document pdf,
+    Uint8List bytes,
     String fileName,
   ) async {
     try {
@@ -59,7 +31,7 @@ class PdfReportGenerator {
           ? fileName
           : '${fileName.replaceAll(RegExp(r'\.+$'), '')}.pdf';
       final File file = File('${directory!.path}/$cleanName');
-      await file.writeAsBytes(await pdf.save());
+      await file.writeAsBytes(bytes);
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -77,91 +49,193 @@ class PdfReportGenerator {
     }
   }
 
-  static pw.Widget _buildHeader(
-    pw.Font font,
-    String societyName,
-    String reportTitle,
-    String subtitle,
-  ) {
-    return pw.Container(
-      margin: const pw.EdgeInsets.only(bottom: 10),
-      padding: const pw.EdgeInsets.only(bottom: 6),
-      decoration: const pw.BoxDecoration(
-        border: pw.Border(bottom: pw.BorderSide(color: PdfColors.green800, width: 1.5)),
-      ),
-      child: pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Text(
-            societyName,
-            style: _bnStyle(
-              font,
-              fontSize: 18,
-              fontWeight: pw.FontWeight.bold,
-              color: PdfColors.green800,
-            ),
-          ),
-          pw.SizedBox(height: 2),
-          pw.Text(
-            reportTitle,
-            style: _bnStyle(
-              font,
-              fontSize: 13,
-              fontWeight: pw.FontWeight.bold,
-              color: PdfColors.black,
-            ),
-          ),
-          if (subtitle.isNotEmpty)
-            pw.Text(
-              subtitle,
-              style: _bnStyle(font, fontSize: 10, color: PdfColors.grey700),
-            ),
-        ],
-      ),
-    );
-  }
+  static Future<void> _renderWidgetToMultiPagePdf(
+    BuildContext context,
+    Widget contentWidget,
+    String fileName,
+  ) async {
+    try {
+      final GlobalKey key = GlobalKey();
+      final OverlayState? overlay = Overlay.maybeOf(context);
 
-  static pw.Widget _buildFooter(pw.Font font, pw.Context pdfContext) {
-    return pw.Container(
-      margin: const pw.EdgeInsets.only(top: 8),
-      padding: const pw.EdgeInsets.only(top: 4),
-      decoration: const pw.BoxDecoration(
-        border: pw.Border(top: pw.BorderSide(color: PdfColors.grey400, width: 0.5)),
-      ),
-      child: pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-        children: [
-          pw.Text(
-            'প্রিন্ট তারিখ: ${_formatDate(DateTime.now())}',
-            style: _bnStyle(font, fontSize: 9, color: PdfColors.grey700),
-          ),
-          pw.Text(
-            'পৃষ্ঠা ${pdfContext.pageNumber} / ${pdfContext.pagesCount}',
-            style: _bnStyle(font, fontSize: 9, color: PdfColors.grey700),
-          ),
-        ],
-      ),
-    );
-  }
+      if (overlay == null) {
+        await _fallbackSimplePdf(context, fileName);
+        return;
+      }
 
-  static pw.Widget _cell(
-    pw.Font font,
-    String text, {
-    bool isHeader = false,
-    pw.TextAlign align = pw.TextAlign.left,
-    PdfColor? color,
-  }) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-      child: pw.Text(
-        text,
-        textAlign: align,
-        style: _bnStyle(
-          font,
-          fontSize: isHeader ? 10.5 : 10,
-          fontWeight: isHeader ? pw.FontWeight.bold : pw.FontWeight.normal,
-          color: color ?? (isHeader ? PdfColors.white : PdfColors.black),
+      late OverlayEntry entry;
+      entry = OverlayEntry(
+        builder: (ctx) => Positioned(
+          left: -10000,
+          top: 0,
+          child: Material(
+            color: Colors.white,
+            child: SizedBox(
+              width: 794,
+              child: RepaintBoundary(
+                key: key,
+                child: Container(
+                  color: Colors.white,
+                  padding: const EdgeInsets.all(24),
+                  child: contentWidget,
+                ),
+              ),
+            ),
+          ),
         ),
+      );
+
+      overlay.insert(entry);
+      await WidgetsBinding.instance.endOfFrame;
+      await Future.delayed(const Duration(milliseconds: 120));
+
+      final RenderRepaintBoundary? boundary =
+          key.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+
+      if (boundary == null) {
+        entry.remove();
+        await _fallbackSimplePdf(context, fileName);
+        return;
+      }
+
+      final ui.Image image = await boundary.toImage(pixelRatio: 2.0);
+      final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+
+      entry.remove();
+
+      if (byteData == null) {
+        throw Exception('PNG conversion failed');
+      }
+
+      final Uint8List pngBytes = byteData.buffer.asUint8List();
+      final ui.Codec codec = await ui.instantiateImageCodec(pngBytes);
+      final ui.FrameInfo frameInfo = await codec.getNextFrame();
+      final ui.Image decodedImage = frameInfo.image;
+
+      final int totalWidth = decodedImage.width;
+      final int totalHeight = decodedImage.height;
+
+      final pw.Document pdf = pw.Document();
+      final double printableWidthPt = PdfPageFormat.a4.availableWidth;
+      final double printableHeightPt = PdfPageFormat.a4.availableHeight - 24;
+      final double scalePtPerPx = printableWidthPt / totalWidth;
+      final int sliceHeightPx =
+          (printableHeightPt / scalePtPerPx).round().clamp(1, totalHeight);
+
+      final List<pw.MemoryImage> pages = [];
+      int currentY = 0;
+
+      while (currentY < totalHeight) {
+        final int sliceH = (currentY + sliceHeightPx > totalHeight)
+            ? (totalHeight - currentY)
+            : sliceHeightPx;
+
+        final ui.PictureRecorder recorder = ui.PictureRecorder();
+        final Canvas canvas = Canvas(recorder);
+        canvas.drawColor(Colors.white, BlendMode.src);
+
+        canvas.drawImageRect(
+          decodedImage,
+          Rect.fromLTWH(0, currentY.toDouble(), totalWidth.toDouble(), sliceH.toDouble()),
+          Rect.fromLTWH(0, 0, totalWidth.toDouble(), sliceH.toDouble()),
+          Paint(),
+        );
+
+        final ui.Image pageImg = await recorder.endRecording().toImage(totalWidth, sliceH);
+        final ByteData? pageBytes = await pageImg.toByteData(format: ui.ImageByteFormat.png);
+        if (pageBytes != null) {
+          pages.add(pw.MemoryImage(pageBytes.buffer.asUint8List()));
+        }
+        pageImg.dispose();
+        currentY += sliceH;
+      }
+
+      decodedImage.dispose();
+
+      final int totalPages = pages.isEmpty ? 1 : pages.length;
+      for (int i = 0; i < pages.length; i++) {
+        pdf.addPage(
+          pw.Page(
+            pageFormat: PdfPageFormat.a4,
+            margin: const pw.EdgeInsets.all(16),
+            build: (ctx) => pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+              children: [
+                pw.Expanded(
+                  child: pw.Align(
+                    alignment: pw.Alignment.topCenter,
+                    child: pw.Image(pages[i], fit: pw.BoxFit.contain),
+                  ),
+                ),
+                pw.SizedBox(height: 4),
+                pw.Align(
+                  alignment: pw.Alignment.centerRight,
+                  child: pw.Text(
+                    'Page ${i + 1} of $totalPages | Printed: ${_formatDate(DateTime.now())}',
+                    style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
+      final Uint8List pdfBytes = await pdf.save();
+      if (context.mounted) {
+        await _savePdfBytes(context, pdfBytes, fileName);
+      }
+    } catch (e) {
+      debugPrint('Render PDF Error: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('PDF তৈরি করতে সমস্যা হয়েছে: $e')),
+        );
+      }
+    }
+  }
+
+  static Future<void> _fallbackSimplePdf(BuildContext context, String fileName) async {
+    final pdf = pw.Document();
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        build: (ctx) => pw.Center(
+          child: pw.Text('Report Generated: ${_formatDate(DateTime.now())}'),
+        ),
+      ),
+    );
+    await _savePdfBytes(context, await pdf.save(), fileName);
+  }
+
+  static Widget _headerBlock(String societyName, String title, String subtitle) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 8),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Colors.green, width: 2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            societyName,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            title,
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black87),
+          ),
+          if (subtitle.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: const TextStyle(fontSize: 12, color: Colors.black54),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -171,102 +245,82 @@ class PdfReportGenerator {
     String societyName,
     List<Member> members,
   ) async {
-    final font = await _loadNikoshFont();
-    final pdf = pw.Document();
-
     double totalDep = members.fold(0.0, (s, m) => s + m.deposit);
     double totalProf = members.fold(0.0, (s, m) => s + m.profitEarned);
     double totalBal = members.fold(0.0, (s, m) => s + m.totalBalance);
     double totalDue = members.fold(0.0, (s, m) => s + m.dueAmount);
 
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(24),
-        header: (ctx) => _buildHeader(
-          font,
+    final widget = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _headerBlock(
           societyName,
           'সকল সদস্যের সার্বিক স্টেটমেন্ট',
           'মোট সদস্য: ${members.length} জন | মোট সঞ্চয়: ৳${totalDep.toStringAsFixed(2)} | মোট বকেয়া: ৳${totalDue.toStringAsFixed(2)}',
         ),
-        footer: (ctx) => _buildFooter(font, ctx),
-        build: (ctx) => [
-          pw.Table(
-            border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.6),
-            columnWidths: {
-              0: const pw.FixedColumnWidth(38),
-              1: const pw.FlexColumnWidth(2.4),
-              2: const pw.FlexColumnWidth(1.5),
-              3: const pw.FlexColumnWidth(1.4),
-              4: const pw.FlexColumnWidth(1.3),
-              5: const pw.FlexColumnWidth(1.5),
-              6: const pw.FlexColumnWidth(1.6),
-            },
-            children: [
-              pw.TableRow(
-                decoration: const pw.BoxDecoration(color: PdfColors.green800),
-                repeat: true,
-                children: [
-                  _cell(font, 'ID', isHeader: true, align: pw.TextAlign.center),
-                  _cell(font, 'সদস্যের নাম', isHeader: true),
-                  _cell(font, 'মোবাইল', isHeader: true),
-                  _cell(font, 'মূল জমা', isHeader: true, align: pw.TextAlign.right),
-                  _cell(font, 'অর্জিত লাভ', isHeader: true, align: pw.TextAlign.right),
-                  _cell(font, 'মোট ব্যালেন্স', isHeader: true, align: pw.TextAlign.right),
-                  _cell(font, 'বকেয়া / অগ্রিম', isHeader: true, align: pw.TextAlign.right),
-                ],
-              ),
-              ...members.asMap().entries.map((entry) {
-                final idx = entry.key;
-                final m = entry.value;
-                final String dueAdv = m.dueAmount > 0
-                    ? 'বকেয়া: ৳${m.dueAmount.toStringAsFixed(0)} (${m.dueMonthsCount} মা.)'
-                    : (m.advanceAmount > 0
-                        ? 'অগ্রিম: ৳${m.advanceAmount.toStringAsFixed(0)}'
-                        : '৳0.00');
+        Table(
+          border: TableBorder.all(color: Colors.grey.shade400, width: 0.8),
+          columnWidths: const {
+            0: FixedColumnWidth(46),
+            1: FlexColumnWidth(2.2),
+            2: FlexColumnWidth(1.6),
+            3: FlexColumnWidth(1.4),
+            4: FlexColumnWidth(1.3),
+            5: FlexColumnWidth(1.5),
+            6: FlexColumnWidth(1.8),
+          },
+          children: [
+            TableRow(
+              decoration: BoxDecoration(color: Colors.green.shade800),
+              children: const [
+                Padding(padding: EdgeInsets.all(6), child: Text('ID', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                Padding(padding: EdgeInsets.all(6), child: Text('সদস্যের নাম', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                Padding(padding: EdgeInsets.all(6), child: Text('মোবাইল', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                Padding(padding: EdgeInsets.all(6), child: Text('মূল জমা', textAlign: TextAlign.right, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                Padding(padding: EdgeInsets.all(6), child: Text('অর্জিত লাভ', textAlign: TextAlign.right, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                Padding(padding: EdgeInsets.all(6), child: Text('মোট ব্যালেন্স', textAlign: TextAlign.right, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                Padding(padding: EdgeInsets.all(6), child: Text('বকেয়া / অগ্রিম', textAlign: TextAlign.right, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+              ],
+            ),
+            ...members.asMap().entries.map((entry) {
+              final idx = entry.key;
+              final m = entry.value;
+              final String dueAdv = m.dueAmount > 0
+                  ? 'বকেয়া: ৳${m.dueAmount.toStringAsFixed(0)} (${m.dueMonthsCount} মা.)'
+                  : (m.advanceAmount > 0 ? 'অগ্রিম: ৳${m.advanceAmount.toStringAsFixed(0)}' : '৳0.00');
 
-                return pw.TableRow(
-                  decoration: pw.BoxDecoration(
-                    color: idx % 2 == 1 ? PdfColors.grey100 : PdfColors.white,
-                  ),
-                  children: [
-                    _cell(font, m.id, align: pw.TextAlign.center),
-                    _cell(font, m.name),
-                    _cell(font, m.mobile),
-                    _cell(font, '৳${m.deposit.toStringAsFixed(2)}', align: pw.TextAlign.right),
-                    _cell(font, '৳${m.profitEarned.toStringAsFixed(2)}',
-                        align: pw.TextAlign.right, color: PdfColors.blue800),
-                    _cell(font, '৳${m.totalBalance.toStringAsFixed(2)}',
-                        align: pw.TextAlign.right, color: PdfColors.green800),
-                    _cell(font, dueAdv,
-                        align: pw.TextAlign.right,
-                        color: m.dueAmount > 0 ? PdfColors.red800 : PdfColors.teal800),
-                  ],
-                );
-              }),
-              pw.TableRow(
-                decoration: const pw.BoxDecoration(color: PdfColors.green50),
+              return TableRow(
+                decoration: BoxDecoration(color: idx % 2 == 1 ? Colors.grey.shade100 : Colors.white),
                 children: [
-                  _cell(font, '', isHeader: true, color: PdfColors.black),
-                  _cell(font, 'সর্বমোট হিসাব', isHeader: true, color: PdfColors.black),
-                  _cell(font, '', isHeader: true, color: PdfColors.black),
-                  _cell(font, '৳${totalDep.toStringAsFixed(2)}',
-                      isHeader: true, align: pw.TextAlign.right, color: PdfColors.black),
-                  _cell(font, '৳${totalProf.toStringAsFixed(2)}',
-                      isHeader: true, align: pw.TextAlign.right, color: PdfColors.blue800),
-                  _cell(font, '৳${totalBal.toStringAsFixed(2)}',
-                      isHeader: true, align: pw.TextAlign.right, color: PdfColors.green800),
-                  _cell(font, '৳${totalDue.toStringAsFixed(2)}',
-                      isHeader: true, align: pw.TextAlign.right, color: PdfColors.red800),
+                  Padding(padding: const EdgeInsets.all(6), child: Text(m.id, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12))),
+                  Padding(padding: const EdgeInsets.all(6), child: Text(m.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+                  Padding(padding: const EdgeInsets.all(6), child: Text(m.mobile, style: const TextStyle(fontSize: 12))),
+                  Padding(padding: const EdgeInsets.all(6), child: Text('৳${m.deposit.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontSize: 12))),
+                  Padding(padding: const EdgeInsets.all(6), child: Text('৳${m.profitEarned.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, color: Colors.blue))),
+                  Padding(padding: const EdgeInsets.all(6), child: Text('৳${m.totalBalance.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.bold))),
+                  Padding(padding: const EdgeInsets.all(6), child: Text(dueAdv, textAlign: TextAlign.right, style: TextStyle(fontSize: 12, color: m.dueAmount > 0 ? Colors.red : Colors.teal, fontWeight: FontWeight.bold))),
                 ],
-              ),
-            ],
-          ),
-        ],
-      ),
+              );
+            }),
+            TableRow(
+              decoration: BoxDecoration(color: Colors.green.shade50),
+              children: [
+                const Padding(padding: EdgeInsets.all(6), child: Text('')),
+                const Padding(padding: EdgeInsets.all(6), child: Text('সর্বমোট হিসাব', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                const Padding(padding: EdgeInsets.all(6), child: Text('')),
+                Padding(padding: const EdgeInsets.all(6), child: Text('৳${totalDep.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                Padding(padding: const EdgeInsets.all(6), child: Text('৳${totalProf.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blue))),
+                Padding(padding: const EdgeInsets.all(6), child: Text('৳${totalBal.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.green))),
+                Padding(padding: const EdgeInsets.all(6), child: Text('৳${totalDue.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.red))),
+              ],
+            ),
+          ],
+        ),
+      ],
     );
 
-    await _saveAndOpenPdf(context, pdf, 'All_Members_Report.pdf');
+    await _renderWidgetToMultiPagePdf(context, widget, 'All_Members_Report.pdf');
   }
 
   static Future<void> generateSingleMemberStatement(
@@ -274,123 +328,84 @@ class PdfReportGenerator {
     String societyName,
     Member member,
   ) async {
-    final font = await _loadNikoshFont();
-    final pdf = pw.Document();
-
     final String statusText = member.dueAmount > 0
         ? 'বকেয়া: ৳${member.dueAmount.toStringAsFixed(2)} (${member.dueMonthsCount} মাস)'
-        : (member.advanceAmount > 0
-            ? 'অতিরিক্ত জমা: ৳${member.advanceAmount.toStringAsFixed(2)}'
-            : 'বকেয়া: ৳0.00 (পরিশোধিত)');
+        : (member.advanceAmount > 0 ? 'অতিরিক্ত জমা: ৳${member.advanceAmount.toStringAsFixed(2)}' : 'বকেয়া: ৳0.00 (পরিশোধিত)');
 
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(24),
-        header: (ctx) => _buildHeader(
-          font,
+    final widget = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _headerBlock(
           societyName,
           'সদস্যের ব্যক্তিগত হিসাব বিবরণী',
           'নাম: ${member.name} | আইডি: ${member.id} | মোবাইল: ${member.mobile}',
         ),
-        footer: (ctx) => _buildFooter(font, ctx),
-        build: (ctx) => [
-          pw.Container(
-            padding: const pw.EdgeInsets.all(10),
-            margin: const pw.EdgeInsets.only(bottom: 12),
-            decoration: pw.BoxDecoration(
-              color: PdfColors.green50,
-              border: pw.Border.all(color: PdfColors.green300),
-              borderRadius: pw.BorderRadius.circular(4),
-            ),
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text(
-                  '• মূল সঞ্চয় (কিস্তি জমা): ৳${member.deposit.toStringAsFixed(2)}',
-                  style: _bnStyle(font, fontSize: 11, fontWeight: pw.FontWeight.bold),
-                ),
-                pw.Text(
-                  '• অর্জিত মোট লাভ: ৳${member.profitEarned.toStringAsFixed(2)}',
-                  style: _bnStyle(font, fontSize: 11, color: PdfColors.blue800),
-                ),
-                pw.Text(
-                  '• সর্বমোট ব্যালেন্স: ৳${member.totalBalance.toStringAsFixed(2)}',
-                  style: _bnStyle(
-                    font,
-                    fontSize: 12,
-                    fontWeight: pw.FontWeight.bold,
-                    color: PdfColors.green800,
-                  ),
-                ),
-                pw.Text(
-                  '• $statusText',
-                  style: _bnStyle(
-                    font,
-                    fontSize: 11,
-                    color: member.dueAmount > 0 ? PdfColors.red800 : PdfColors.teal800,
-                  ),
-                ),
-              ],
-            ),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          margin: const EdgeInsets.only(bottom: 14),
+          decoration: BoxDecoration(
+            color: Colors.green.shade50,
+            border: Border.all(color: Colors.green.shade200),
+            borderRadius: BorderRadius.circular(6),
           ),
-          if (member.transactions.isEmpty)
-            pw.Text('কোনো লেনদেন রেকর্ড নেই।', style: _bnStyle(font, fontSize: 11))
-          else
-            pw.Table(
-              border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.6),
-              columnWidths: {
-                0: const pw.FixedColumnWidth(32),
-                1: const pw.FixedColumnWidth(72),
-                2: const pw.FlexColumnWidth(2.4),
-                3: const pw.FlexColumnWidth(1.3),
-                4: const pw.FlexColumnWidth(1.3),
-              },
-              children: [
-                pw.TableRow(
-                  decoration: const pw.BoxDecoration(color: PdfColors.green800),
-                  repeat: true,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('• মূল সঞ্চয় (কিস্তি জমা): ৳${member.deposit.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 3),
+              Text('• অর্জিত মোট লাভ: ৳${member.profitEarned.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, color: Colors.blue, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 3),
+              Text('• সর্বমোট ব্যালেন্স: ৳${member.totalBalance.toStringAsFixed(2)}', style: const TextStyle(fontSize: 14, color: Colors.green, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 3),
+              Text('• $statusText', style: TextStyle(fontSize: 13, color: member.dueAmount > 0 ? Colors.red : Colors.teal, fontWeight: FontWeight.bold)),
+            ],
+          ),
+        ),
+        if (member.transactions.isEmpty)
+          const Text('কোনো লেনদেন রেকর্ড নেই।', style: TextStyle(fontSize: 13))
+        else
+          Table(
+            border: TableBorder.all(color: Colors.grey.shade400, width: 0.8),
+            columnWidths: const {
+              0: FixedColumnWidth(42),
+              1: FixedColumnWidth(90),
+              2: FlexColumnWidth(2.4),
+              3: FlexColumnWidth(1.4),
+              4: FlexColumnWidth(1.4),
+            },
+            children: [
+              TableRow(
+                decoration: BoxDecoration(color: Colors.green.shade800),
+                children: const [
+                  Padding(padding: EdgeInsets.all(6), child: Text('ক্রম', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                  Padding(padding: EdgeInsets.all(6), child: Text('তারিখ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                  Padding(padding: EdgeInsets.all(6), child: Text('বিবরণ / মাধ্যম', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                  Padding(padding: EdgeInsets.all(6), child: Text('TrxID / স্ট্যাটাস', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                  Padding(padding: EdgeInsets.all(6), child: Text('টাকার পরিমাণ', textAlign: TextAlign.right, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                ],
+              ),
+              ...member.transactions.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final tx = entry.value;
+                return TableRow(
+                  decoration: BoxDecoration(color: idx % 2 == 1 ? Colors.grey.shade100 : Colors.white),
                   children: [
-                    _cell(font, 'ক্রম', isHeader: true, align: pw.TextAlign.center),
-                    _cell(font, 'তারিখ', isHeader: true),
-                    _cell(font, 'বিবরণ / মাধ্যম', isHeader: true),
-                    _cell(font, 'TrxID / স্ট্যাটাস', isHeader: true),
-                    _cell(font, 'টাকার পরিমাণ', isHeader: true, align: pw.TextAlign.right),
+                    Padding(padding: const EdgeInsets.all(6), child: Text('${idx + 1}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12))),
+                    Padding(padding: const EdgeInsets.all(6), child: Text(_formatDate(tx.date), style: const TextStyle(fontSize: 12))),
+                    Padding(padding: const EdgeInsets.all(6), child: Text(tx.paymentMethod, style: const TextStyle(fontSize: 12))),
+                    Padding(padding: const EdgeInsets.all(6), child: Text(tx.trxId.isNotEmpty ? '${tx.trxId} (${tx.status})' : tx.status, style: const TextStyle(fontSize: 12))),
+                    Padding(padding: const EdgeInsets.all(6), child: Text('৳${tx.amount.toStringAsFixed(2)}', textAlign: TextAlign.right, style: TextStyle(fontSize: 12, color: tx.isProfit ? Colors.blue : Colors.green, fontWeight: FontWeight.bold))),
                   ],
-                ),
-                ...member.transactions.asMap().entries.map((entry) {
-                  final idx = entry.key;
-                  final tx = entry.value;
-                  return pw.TableRow(
-                    decoration: pw.BoxDecoration(
-                      color: idx % 2 == 1 ? PdfColors.grey100 : PdfColors.white,
-                    ),
-                    children: [
-                      _cell(font, '${idx + 1}', align: pw.TextAlign.center),
-                      _cell(font, _formatDate(tx.date)),
-                      _cell(font, tx.paymentMethod),
-                      _cell(
-                        font,
-                        tx.trxId.isNotEmpty
-                            ? '${tx.trxId} (${tx.status})'
-                            : tx.status,
-                      ),
-                      _cell(
-                        font,
-                        '৳${tx.amount.toStringAsFixed(2)}',
-                        align: pw.TextAlign.right,
-                        color: tx.isProfit ? PdfColors.blue800 : PdfColors.green800,
-                      ),
-                    ],
-                  );
-                }),
-              ],
-            ),
-        ],
-      ),
+                );
+              }),
+            ],
+          ),
+      ],
     );
 
-    await _saveAndOpenPdf(context, pdf, 'Member_${member.name}_Statement.pdf');
+    await _renderWidgetToMultiPagePdf(context, widget, 'Member_${member.name}_Statement.pdf');
   }
 
   static Future<void> generateBusinessLedgerReport(
@@ -401,82 +416,63 @@ class PdfReportGenerator {
     double currentExpense,
     double currentNetProfit,
   ) async {
-    final font = await _loadNikoshFont();
-    final pdf = pw.Document();
-
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(24),
-        header: (ctx) => _buildHeader(
-          font,
+    final widget = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _headerBlock(
           societyName,
           'ব্যবসার লাভ-ক্ষতি খতিয়ান ও রিপোর্ট',
           'চলমান মুনাফা: ৳${currentIncome.toStringAsFixed(2)} | চলমান খরচ: ৳${currentExpense.toStringAsFixed(2)} | নিট লাভ: ৳${currentNetProfit.toStringAsFixed(2)}',
         ),
-        footer: (ctx) => _buildFooter(font, ctx),
-        build: (ctx) => [
-          if (records.isEmpty)
-            pw.Text('কোনো ব্যবসায়িক পোস্টিং নেই।', style: _bnStyle(font, fontSize: 11))
-          else
-            pw.Table(
-              border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.6),
-              columnWidths: {
-                0: const pw.FixedColumnWidth(32),
-                1: const pw.FixedColumnWidth(72),
-                2: const pw.FlexColumnWidth(2.6),
-                3: const pw.FlexColumnWidth(1.1),
-                4: const pw.FlexColumnWidth(1.1),
-                5: const pw.FlexColumnWidth(1.4),
-              },
-              children: [
-                pw.TableRow(
-                  decoration: const pw.BoxDecoration(color: PdfColors.green800),
-                  repeat: true,
+        if (records.isEmpty)
+          const Text('কোনো ব্যবসায়িক পোস্টিং নেই।', style: TextStyle(fontSize: 13))
+        else
+          Table(
+            border: TableBorder.all(color: Colors.grey.shade400, width: 0.8),
+            columnWidths: const {
+              0: FixedColumnWidth(42),
+              1: FixedColumnWidth(90),
+              2: FlexColumnWidth(2.6),
+              3: FlexColumnWidth(1.1),
+              4: FlexColumnWidth(1.1),
+              5: FlexColumnWidth(1.4),
+            },
+            children: [
+              TableRow(
+                decoration: BoxDecoration(color: Colors.green.shade800),
+                children: const [
+                  Padding(padding: EdgeInsets.all(6), child: Text('ক্রম', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                  Padding(padding: EdgeInsets.all(6), child: Text('তারিখ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                  Padding(padding: EdgeInsets.all(6), child: Text('বিবরণ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                  Padding(padding: EdgeInsets.all(6), child: Text('ধরন', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                  Padding(padding: EdgeInsets.all(6), child: Text('অবস্থা', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                  Padding(padding: EdgeInsets.all(6), child: Text('টাকার পরিমাণ', textAlign: TextAlign.right, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                ],
+              ),
+              ...records.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final r = entry.value;
+                return TableRow(
+                  decoration: BoxDecoration(color: idx % 2 == 1 ? Colors.grey.shade100 : Colors.white),
                   children: [
-                    _cell(font, 'ক্রম', isHeader: true, align: pw.TextAlign.center),
-                    _cell(font, 'তারিখ', isHeader: true),
-                    _cell(font, 'বিবরণ', isHeader: true),
-                    _cell(font, 'ধরন', isHeader: true),
-                    _cell(font, 'অবস্থা', isHeader: true),
-                    _cell(font, 'টাকার পরিমাণ', isHeader: true, align: pw.TextAlign.right),
+                    Padding(padding: const EdgeInsets.all(6), child: Text('${idx + 1}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12))),
+                    Padding(padding: const EdgeInsets.all(6), child: Text(_formatDate(r.date), style: const TextStyle(fontSize: 12))),
+                    Padding(padding: const EdgeInsets.all(6), child: Text(r.title, style: const TextStyle(fontSize: 12))),
+                    Padding(padding: const EdgeInsets.all(6), child: Text(r.isIncome ? 'লাভ (+)' : 'খরচ (-)', style: TextStyle(fontSize: 12, color: r.isIncome ? Colors.green : Colors.red, fontWeight: FontWeight.bold))),
+                    Padding(padding: const EdgeInsets.all(6), child: Text(r.isSettled ? 'বণ্টনকৃত' : 'চলমান', style: const TextStyle(fontSize: 12))),
+                    Padding(padding: const EdgeInsets.all(6), child: Text('${r.isIncome ? '+' : '-'}৳${r.amount.toStringAsFixed(2)}', textAlign: TextAlign.right, style: TextStyle(fontSize: 12, color: r.isIncome ? Colors.green : Colors.red, fontWeight: FontWeight.bold))),
                   ],
-                ),
-                ...records.asMap().entries.map((entry) {
-                  final idx = entry.key;
-                  final r = entry.value;
-                  return pw.TableRow(
-                    decoration: pw.BoxDecoration(
-                      color: idx % 2 == 1 ? PdfColors.grey100 : PdfColors.white,
-                    ),
-                    children: [
-                      _cell(font, '${idx + 1}', align: pw.TextAlign.center),
-                      _cell(font, _formatDate(r.date)),
-                      _cell(font, r.title),
-                      _cell(
-                        font,
-                        r.isIncome ? 'লাভ (+)' : 'খরচ (-)',
-                        color: r.isIncome ? PdfColors.green800 : PdfColors.red800,
-                      ),
-                      _cell(font, r.isSettled ? 'বণ্টনকৃত' : 'চলমান'),
-                      _cell(
-                        font,
-                        '${r.isIncome ? '+' : '-'}৳${r.amount.toStringAsFixed(2)}',
-                        align: pw.TextAlign.right,
-                        color: r.isIncome ? PdfColors.green800 : PdfColors.red800,
-                      ),
-                    ],
-                  );
-                }),
-              ],
-            ),
-        ],
-      ),
+                );
+              }),
+            ],
+          ),
+      ],
     );
 
-    await _saveAndOpenPdf(
+    await _renderWidgetToMultiPagePdf(
       context,
-      pdf,
+      widget,
       'Business_Ledger_${DateTime.now().millisecondsSinceEpoch}.pdf',
     );
   }
@@ -495,143 +491,119 @@ class PdfReportGenerator {
     required List<dynamic> memberMonthEntries,
     required List<BusinessRecord> monthBizRecords,
   }) async {
-    final font = await _loadNikoshFont();
-    final pdf = pw.Document();
-
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(24),
-        header: (ctx) => _buildHeader(
-          font,
+    final widget = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _headerBlock(
           societyName,
           'মাসিক আয়-ব্যয় ও জমা রিপোর্ট — $monthLabel',
           'কিস্তি জমা: ৳${monthlyDepositTotal.toStringAsFixed(2)} ($monthlyDepositCountটি) | লাভ বণ্টন: ৳${monthlyProfitTotal.toStringAsFixed(2)}',
         ),
-        footer: (ctx) => _buildFooter(font, ctx),
-        build: (ctx) => [
-          pw.Container(
-            padding: const pw.EdgeInsets.all(10),
-            margin: const pw.EdgeInsets.only(bottom: 12),
-            decoration: pw.BoxDecoration(
-              color: PdfColors.teal50,
-              border: pw.Border.all(color: PdfColors.teal300),
-              borderRadius: pw.BorderRadius.circular(4),
-            ),
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text('• মোট কিস্তি জমা: ৳${monthlyDepositTotal.toStringAsFixed(2)} ($monthlyDepositCountটি)',
-                    style: _bnStyle(font, fontSize: 11, color: PdfColors.green800)),
-                pw.Text('• মোট লাভ বণ্টন: ৳${monthlyProfitTotal.toStringAsFixed(2)}',
-                    style: _bnStyle(font, fontSize: 11, color: PdfColors.blue800)),
-                pw.Text('• ব্যবসায়িক আয়: ৳${monthlyBizIncome.toStringAsFixed(2)} | প্রজেক্ট খরচ: ৳${monthlyBizExpense.toStringAsFixed(2)}',
-                    style: _bnStyle(font, fontSize: 11)),
-              ],
-            ),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          margin: const EdgeInsets.only(bottom: 14),
+          decoration: BoxDecoration(
+            color: Colors.teal.shade50,
+            border: Border.all(color: Colors.teal.shade200),
+            borderRadius: BorderRadius.circular(6),
           ),
-          pw.Text(
-            '১. সদস্যদের লেনদেনসমূহ:',
-            style: _bnStyle(font, fontSize: 12, fontWeight: pw.FontWeight.bold),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('• মোট কিস্তি জমা: ৳${monthlyDepositTotal.toStringAsFixed(2)} ($monthlyDepositCountটি)', style: const TextStyle(fontSize: 13, color: Colors.green, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 3),
+              Text('• মোট লাভ বণ্টন: ৳${monthlyProfitTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, color: Colors.blue, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 3),
+              Text('• ব্যবসায়িক আয়: ৳${monthlyBizIncome.toStringAsFixed(2)} | প্রজেক্ট খরচ: ৳${monthlyBizExpense.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13)),
+            ],
           ),
-          pw.SizedBox(height: 6),
-          if (memberMonthEntries.isEmpty)
-            pw.Text('এই মাসে কোনো সদস্যের লেনদেন নেই।', style: _bnStyle(font, fontSize: 10))
-          else
-            pw.Table(
-              border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.6),
-              columnWidths: {
-                0: const pw.FixedColumnWidth(32),
-                1: const pw.FixedColumnWidth(72),
-                2: const pw.FlexColumnWidth(2.2),
-                3: const pw.FlexColumnWidth(1.6),
-                4: const pw.FlexColumnWidth(1.3),
-              },
-              children: [
-                pw.TableRow(
-                  decoration: const pw.BoxDecoration(color: PdfColors.green800),
-                  repeat: true,
+        ),
+        const Text('১. সদস্যদের লেনদেনসমূহ:', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 6),
+        if (memberMonthEntries.isEmpty)
+          const Text('এই মাসে কোনো সদস্যের লেনদেন নেই।', style: TextStyle(fontSize: 12, color: Colors.grey))
+        else
+          Table(
+            border: TableBorder.all(color: Colors.grey.shade400, width: 0.8),
+            columnWidths: const {
+              0: FixedColumnWidth(42),
+              1: FixedColumnWidth(90),
+              2: FlexColumnWidth(2.2),
+              3: FlexColumnWidth(1.6),
+              4: FlexColumnWidth(1.3),
+            },
+            children: [
+              TableRow(
+                decoration: BoxDecoration(color: Colors.green.shade800),
+                children: const [
+                  Padding(padding: EdgeInsets.all(6), child: Text('ক্রম', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                  Padding(padding: EdgeInsets.all(6), child: Text('তারিখ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                  Padding(padding: EdgeInsets.all(6), child: Text('সদস্য (ID)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                  Padding(padding: EdgeInsets.all(6), child: Text('মাধ্যম / ধরন', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                  Padding(padding: EdgeInsets.all(6), child: Text('টাকার পরিমাণ', textAlign: TextAlign.right, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                ],
+              ),
+              ...memberMonthEntries.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final Member m = entry.value['member'];
+                final TransactionHistory t = entry.value['tx'];
+                return TableRow(
+                  decoration: BoxDecoration(color: idx % 2 == 1 ? Colors.grey.shade100 : Colors.white),
                   children: [
-                    _cell(font, 'ক্রম', isHeader: true, align: pw.TextAlign.center),
-                    _cell(font, 'তারিখ', isHeader: true),
-                    _cell(font, 'সদস্য (ID)', isHeader: true),
-                    _cell(font, 'মাধ্যম / ধরন', isHeader: true),
-                    _cell(font, 'টাকার পরিমাণ', isHeader: true, align: pw.TextAlign.right),
+                    Padding(padding: const EdgeInsets.all(6), child: Text('${idx + 1}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12))),
+                    Padding(padding: const EdgeInsets.all(6), child: Text(_formatDate(t.date), style: const TextStyle(fontSize: 12))),
+                    Padding(padding: const EdgeInsets.all(6), child: Text('${m.name} (${m.id})', style: const TextStyle(fontSize: 12))),
+                    Padding(padding: const EdgeInsets.all(6), child: Text(t.isProfit ? 'লাভ বণ্টন' : t.paymentMethod, style: const TextStyle(fontSize: 12))),
+                    Padding(padding: const EdgeInsets.all(6), child: Text('৳${t.amount.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
                   ],
-                ),
-                ...memberMonthEntries.asMap().entries.map((entry) {
-                  final idx = entry.key;
-                  final Member m = entry.value['member'];
-                  final TransactionHistory t = entry.value['tx'];
-                  return pw.TableRow(
-                    decoration: pw.BoxDecoration(
-                      color: idx % 2 == 1 ? PdfColors.grey100 : PdfColors.white,
-                    ),
-                    children: [
-                      _cell(font, '${idx + 1}', align: pw.TextAlign.center),
-                      _cell(font, _formatDate(t.date)),
-                      _cell(font, '${m.name} (${m.id})'),
-                      _cell(font, t.isProfit ? 'লাভ বণ্টন' : t.paymentMethod),
-                      _cell(font, '৳${t.amount.toStringAsFixed(2)}', align: pw.TextAlign.right),
-                    ],
-                  );
-                }),
-              ],
-            ),
-          pw.SizedBox(height: 14),
-          pw.Text(
-            '২. ব্যবসার আয়-ব্যয় পোস্টিং:',
-            style: _bnStyle(font, fontSize: 12, fontWeight: pw.FontWeight.bold),
+                );
+              }),
+            ],
           ),
-          pw.SizedBox(height: 6),
-          if (monthBizRecords.isEmpty)
-            pw.Text('এই মাসে কোনো ব্যবসায়িক পোস্টিং নেই।', style: _bnStyle(font, fontSize: 10))
-          else
-            pw.Table(
-              border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.6),
-              columnWidths: {
-                0: const pw.FixedColumnWidth(32),
-                1: const pw.FixedColumnWidth(72),
-                2: const pw.FlexColumnWidth(2.6),
-                3: const pw.FlexColumnWidth(1.4),
-              },
-              children: [
-                pw.TableRow(
-                  decoration: const pw.BoxDecoration(color: PdfColors.teal800),
-                  repeat: true,
+        const SizedBox(height: 14),
+        const Text('২. ব্যবসার আয়-ব্যয় পোস্টিং:', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 6),
+        if (monthBizRecords.isEmpty)
+          const Text('এই মাসে কোনো ব্যবসায়িক পোস্টিং নেই।', style: TextStyle(fontSize: 12, color: Colors.grey))
+        else
+          Table(
+            border: TableBorder.all(color: Colors.grey.shade400, width: 0.8),
+            columnWidths: const {
+              0: FixedColumnWidth(42),
+              1: FixedColumnWidth(90),
+              2: FlexColumnWidth(2.6),
+              3: FlexColumnWidth(1.4),
+            },
+            children: [
+              TableRow(
+                decoration: BoxDecoration(color: Colors.teal.shade800),
+                children: const [
+                  Padding(padding: EdgeInsets.all(6), child: Text('ক্রম', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                  Padding(padding: EdgeInsets.all(6), child: Text('তারিখ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                  Padding(padding: EdgeInsets.all(6), child: Text('বিবরণ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                  Padding(padding: EdgeInsets.all(6), child: Text('টাকার পরিমাণ', textAlign: TextAlign.right, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                ],
+              ),
+              ...monthBizRecords.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final r = entry.value;
+                return TableRow(
+                  decoration: BoxDecoration(color: idx % 2 == 1 ? Colors.grey.shade100 : Colors.white),
                   children: [
-                    _cell(font, 'ক্রম', isHeader: true, align: pw.TextAlign.center),
-                    _cell(font, 'তারিখ', isHeader: true),
-                    _cell(font, 'বিবরণ', isHeader: true),
-                    _cell(font, 'টাকার পরিমাণ', isHeader: true, align: pw.TextAlign.right),
+                    Padding(padding: const EdgeInsets.all(6), child: Text('${idx + 1}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12))),
+                    Padding(padding: const EdgeInsets.all(6), child: Text(_formatDate(r.date), style: const TextStyle(fontSize: 12))),
+                    Padding(padding: const EdgeInsets.all(6), child: Text(r.title, style: const TextStyle(fontSize: 12))),
+                    Padding(padding: const EdgeInsets.all(6), child: Text('${r.isIncome ? '+' : '-'}৳${r.amount.toStringAsFixed(2)}', textAlign: TextAlign.right, style: TextStyle(fontSize: 12, color: r.isIncome ? Colors.green : Colors.red, fontWeight: FontWeight.bold))),
                   ],
-                ),
-                ...monthBizRecords.asMap().entries.map((entry) {
-                  final idx = entry.key;
-                  final r = entry.value;
-                  return pw.TableRow(
-                    decoration: pw.BoxDecoration(
-                      color: idx % 2 == 1 ? PdfColors.grey100 : PdfColors.white,
-                    ),
-                    children: [
-                      _cell(font, '${idx + 1}', align: pw.TextAlign.center),
-                      _cell(font, _formatDate(r.date)),
-                      _cell(font, r.title),
-                      _cell(
-                        font,
-                        '${r.isIncome ? '+' : '-'}৳${r.amount.toStringAsFixed(2)}',
-                        align: pw.TextAlign.right,
-                        color: r.isIncome ? PdfColors.green800 : PdfColors.red800,
-                      ),
-                    ],
-                  );
-                }),
-              ],
-            ),
-        ],
-      ),
+                );
+              }),
+            ],
+          ),
+      ],
     );
 
-    await _saveAndOpenPdf(context, pdf, 'Monthly_Report_${selectedMonth}_${selectedYear}.pdf');
+    await _renderWidgetToMultiPagePdf(context, widget, 'Monthly_Report_${selectedMonth}_${selectedYear}.pdf');
   }
 }
