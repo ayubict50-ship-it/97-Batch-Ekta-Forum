@@ -9,8 +9,32 @@ import 'main.dart';
 
 class PdfReportGenerator {
   static Future<pw.Font> _loadNikoshFont() async {
-    final fontData = await rootBundle.load('assets/fonts/NikoshBAN.ttf');
-    return pw.Font.ttf(fontData);
+    try {
+      final fontData = await rootBundle.load('assets/fonts/NikoshBAN.ttf');
+      if (fontData.lengthInBytes > 0) {
+        return pw.Font.ttf(fontData);
+      }
+    } catch (e) {
+      debugPrint('NikoshBAN font load error: $e');
+    }
+    return pw.Font.helvetica();
+  }
+
+  static pw.TextStyle _bnStyle(
+    pw.Font font, {
+    double fontSize = 10.5,
+    pw.FontWeight fontWeight = pw.FontWeight.normal,
+    PdfColor color = PdfColors.black,
+  }) {
+    return pw.TextStyle(
+      font: font,
+      fontFallback: [font],
+      fontSize: fontSize,
+      fontWeight: fontWeight,
+      color: color,
+      letterSpacing: 0.2,
+      lineSpacing: 1.25,
+    );
   }
 
   static String _formatDate(DateTime d) {
@@ -70,8 +94,8 @@ class PdfReportGenerator {
         children: [
           pw.Text(
             societyName,
-            style: pw.TextStyle(
-              font: font,
+            style: _bnStyle(
+              font,
               fontSize: 18,
               fontWeight: pw.FontWeight.bold,
               color: PdfColors.green800,
@@ -80,8 +104,8 @@ class PdfReportGenerator {
           pw.SizedBox(height: 2),
           pw.Text(
             reportTitle,
-            style: pw.TextStyle(
-              font: font,
+            style: _bnStyle(
+              font,
               fontSize: 13,
               fontWeight: pw.FontWeight.bold,
               color: PdfColors.black,
@@ -90,7 +114,7 @@ class PdfReportGenerator {
           if (subtitle.isNotEmpty)
             pw.Text(
               subtitle,
-              style: pw.TextStyle(font: font, fontSize: 10, color: PdfColors.grey700),
+              style: _bnStyle(font, fontSize: 10, color: PdfColors.grey700),
             ),
         ],
       ),
@@ -105,15 +129,15 @@ class PdfReportGenerator {
         border: pw.Border(top: pw.BorderSide(color: PdfColors.grey400, width: 0.5)),
       ),
       child: pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           pw.Text(
             'প্রিন্ট তারিখ: ${_formatDate(DateTime.now())}',
-            style: pw.TextStyle(font: font, fontSize: 9, color: PdfColors.grey700),
+            style: _bnStyle(font, fontSize: 9, color: PdfColors.grey700),
           ),
           pw.Text(
             'পৃষ্ঠা ${pdfContext.pageNumber} / ${pdfContext.pagesCount}',
-            style: pw.TextStyle(font: font, fontSize: 9, color: PdfColors.grey700),
+            style: _bnStyle(font, fontSize: 9, color: PdfColors.grey700),
           ),
         ],
       ),
@@ -132,8 +156,8 @@ class PdfReportGenerator {
       child: pw.Text(
         text,
         textAlign: align,
-        style: pw.TextStyle(
-          font: font,
+        style: _bnStyle(
+          font,
           fontSize: isHeader ? 10.5 : 10,
           fontWeight: isHeader ? pw.FontWeight.bold : pw.FontWeight.normal,
           color: color ?? (isHeader ? PdfColors.white : PdfColors.black),
@@ -284,16 +308,16 @@ class PdfReportGenerator {
               children: [
                 pw.Text(
                   '• মূল সঞ্চয় (কিস্তি জমা): ৳${member.deposit.toStringAsFixed(2)}',
-                  style: pw.TextStyle(font: font, fontSize: 11, fontWeight: pw.FontWeight.bold),
+                  style: _bnStyle(font, fontSize: 11, fontWeight: pw.FontWeight.bold),
                 ),
                 pw.Text(
                   '• অর্জিত মোট লাভ: ৳${member.profitEarned.toStringAsFixed(2)}',
-                  style: pw.TextStyle(font: font, fontSize: 11, color: PdfColors.blue800),
+                  style: _bnStyle(font, fontSize: 11, color: PdfColors.blue800),
                 ),
                 pw.Text(
                   '• সর্বমোট ব্যালেন্স: ৳${member.totalBalance.toStringAsFixed(2)}',
-                  style: pw.TextStyle(
-                    font: font,
+                  style: _bnStyle(
+                    font,
                     fontSize: 12,
                     fontWeight: pw.FontWeight.bold,
                     color: PdfColors.green800,
@@ -301,8 +325,8 @@ class PdfReportGenerator {
                 ),
                 pw.Text(
                   '• $statusText',
-                  style: pw.TextStyle(
-                    font: font,
+                  style: _bnStyle(
+                    font,
                     fontSize: 11,
                     color: member.dueAmount > 0 ? PdfColors.red800 : PdfColors.teal800,
                   ),
@@ -311,7 +335,7 @@ class PdfReportGenerator {
             ),
           ),
           if (member.transactions.isEmpty)
-            pw.Text('কোনো লেনদেন রেকর্ড নেই।', style: pw.TextStyle(font: font, fontSize: 11))
+            pw.Text('কোনো লেনদেন রেকর্ড নেই।', style: _bnStyle(font, fontSize: 11))
           else
             pw.Table(
               border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.6),
@@ -393,7 +417,7 @@ class PdfReportGenerator {
         footer: (ctx) => _buildFooter(font, ctx),
         build: (ctx) => [
           if (records.isEmpty)
-            pw.Text('কোনো ব্যবসায়িক পোস্টিং নেই।', style: pw.TextStyle(font: font, fontSize: 11))
+            pw.Text('কোনো ব্যবসায়িক পোস্টিং নেই।', style: _bnStyle(font, fontSize: 11))
           else
             pw.Table(
               border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.6),
@@ -498,21 +522,21 @@ class PdfReportGenerator {
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
                 pw.Text('• মোট কিস্তি জমা: ৳${monthlyDepositTotal.toStringAsFixed(2)} ($monthlyDepositCountটি)',
-                    style: pw.TextStyle(font: font, fontSize: 11, color: PdfColors.green800)),
+                    style: _bnStyle(font, fontSize: 11, color: PdfColors.green800)),
                 pw.Text('• মোট লাভ বণ্টন: ৳${monthlyProfitTotal.toStringAsFixed(2)}',
-                    style: pw.TextStyle(font: font, fontSize: 11, color: PdfColors.blue800)),
+                    style: _bnStyle(font, fontSize: 11, color: PdfColors.blue800)),
                 pw.Text('• ব্যবসায়িক আয়: ৳${monthlyBizIncome.toStringAsFixed(2)} | প্রজেক্ট খরচ: ৳${monthlyBizExpense.toStringAsFixed(2)}',
-                    style: pw.TextStyle(font: font, fontSize: 11)),
+                    style: _bnStyle(font, fontSize: 11)),
               ],
             ),
           ),
           pw.Text(
             '১. সদস্যদের লেনদেনসমূহ:',
-            style: pw.TextStyle(font: font, fontSize: 12, fontWeight: pw.FontWeight.bold),
+            style: _bnStyle(font, fontSize: 12, fontWeight: pw.FontWeight.bold),
           ),
           pw.SizedBox(height: 6),
           if (memberMonthEntries.isEmpty)
-            pw.Text('এই মাসে কোনো সদস্যের লেনদেন নেই।', style: pw.TextStyle(font: font, fontSize: 10))
+            pw.Text('এই মাসে কোনো সদস্যের লেনদেন নেই।', style: _bnStyle(font, fontSize: 10))
           else
             pw.Table(
               border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.6),
@@ -557,11 +581,11 @@ class PdfReportGenerator {
           pw.SizedBox(height: 14),
           pw.Text(
             '২. ব্যবসার আয়-ব্যয় পোস্টিং:',
-            style: pw.TextStyle(font: font, fontSize: 12, fontWeight: pw.FontWeight.bold),
+            style: _bnStyle(font, fontSize: 12, fontWeight: pw.FontWeight.bold),
           ),
           pw.SizedBox(height: 6),
           if (monthBizRecords.isEmpty)
-            pw.Text('এই মাসে কোনো ব্যবসায়িক পোস্টিং নেই।', style: pw.TextStyle(font: font, fontSize: 10))
+            pw.Text('এই মাসে কোনো ব্যবসায়িক পোস্টিং নেই।', style: _bnStyle(font, fontSize: 10))
           else
             pw.Table(
               border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.6),
