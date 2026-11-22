@@ -142,7 +142,6 @@ class PdfReportGenerator {
     );
   }
 
-  /// ১. সকল সদস্যের সার্বিক স্টেটমেন্ট PDF
   static Future<void> generateAllMembersReport(
     BuildContext context,
     String societyName,
@@ -246,7 +245,6 @@ class PdfReportGenerator {
     await _saveAndOpenPdf(context, pdf, 'All_Members_Report.pdf');
   }
 
-  /// ২. একক সদস্যের পূর্ণাঙ্গ স্টেটমেন্ট PDF (ম্যানেজার ও মেম্বার উভয়ের জন্য)
   static Future<void> generateSingleMemberStatement(
     BuildContext context,
     String societyName,
@@ -371,7 +369,6 @@ class PdfReportGenerator {
     await _saveAndOpenPdf(context, pdf, 'Member_${member.name}_Statement.pdf');
   }
 
-  /// ৩. ব্যবসার লাভ-ক্ষতি খতিয়ান PDF
   static Future<void> generateBusinessLedgerReport(
     BuildContext context,
     String societyName,
@@ -460,7 +457,6 @@ class PdfReportGenerator {
     );
   }
 
-  /// ৪. মাস ভিত্তিক রিপোর্ট PDF
   static Future<void> generateMonthlyReport({
     required BuildContext context,
     required String societyName,
@@ -472,7 +468,7 @@ class PdfReportGenerator {
     required double monthlyProfitTotal,
     required double monthlyBizIncome,
     required double monthlyBizExpense,
-    required List> memberMonthEntries,
+    required List<dynamic> memberMonthEntries,
     required List<BusinessRecord> monthBizRecords,
   }) async {
     final font = await _loadNikoshFont();
