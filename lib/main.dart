@@ -13,6 +13,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:open_file/open_file.dart';
 import 'due_reminder_feature.dart';
+import 'project_summary_feature.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -548,15 +549,15 @@ Future<void> exportBlocksToPdf(
               crossAxisAlignment: pw.CrossAxisAlignment.stretch,
               children: [
                 pw.Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    const pw.Text(
+                    pw.Text(
                       'Samobay Statement Report',
                       style: pw.TextStyle(fontSize: 10.5, color: PdfColors.grey700),
                     ),
                     pw.Text(
                       'Date: ${_formatShortDate(DateTime.now())}',
-                      style: const pw.TextStyle(fontSize: 9.5, color: PdfColors.grey700),
+                      style: pw.TextStyle(fontSize: 9.5, color: PdfColors.grey700),
                     ),
                   ],
                 ),
@@ -564,7 +565,7 @@ Future<void> exportBlocksToPdf(
                 if (indices.isEmpty)
                   pw.Padding(
                     padding: const pw.EdgeInsets.all(20),
-                    child: pw.Text('No records found.', style: const pw.TextStyle(fontSize: 11)),
+                    child: pw.Text('No records found.', style: pw.TextStyle(fontSize: 11)),
                   )
                 else
                   ...indices.map((idx) {
@@ -584,7 +585,7 @@ Future<void> exportBlocksToPdf(
                   alignment: pw.Alignment.centerRight,
                   child: pw.Text(
                     'Page $pageNumber of $totalPages',
-                    style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+                    style: pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
                   ),
                 ),
               ],
@@ -3166,6 +3167,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 ],
               ),
             ),
+            ProjectSummaryCard(totalSavings: totalCollection),
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Align(
