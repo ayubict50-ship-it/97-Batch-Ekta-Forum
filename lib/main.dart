@@ -465,7 +465,7 @@ Future<void> exportBoundaryToPdf(
       return;
     }
 
-    final ui.Image image = await boundary.toImage(pixelRatio: 2.5);
+    final ui.Image image = await boundary.toImage(pixelRatio: 2.0);
     final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
 
     if (byteData == null) {
@@ -484,19 +484,15 @@ Future<void> exportBoundaryToPdf(
     final double printableWidthPt = PdfPageFormat.a4.availableWidth;
     final double printableHeightPt = PdfPageFormat.a4.availableHeight;
 
-    // ৮–১০টি এন্ট্রি পরপর আলাদা পেইজে ভাগ করার জন্য প্রতি পেইজের আনুমানিক উচ্চতা নির্ধারণ
+    // ৮–১০টি এন্ট্রি পরপর আলাদা পেইজে ভাগ করার জন্য প্রতি পেইজের উচ্চতা নির্ধারণ
     final int safePerPage = itemsPerPage < 8 ? 8 : (itemsPerPage > 10 ? 10 : itemsPerPage);
-    final double estimatedRowHeightPt = 58.0;
-    final double targetChunkHeightPt = (safePerPage * estimatedRowHeightPt).clamp(260.0, printableHeightPt);
+    final double estimatedRowHeightPt = 64.0;
+    final double targetChunkHeightPt = (safePerPage * estimatedRowHeightPt).clamp(320.0, printableHeightPt - 28.0);
     final double scalePtPerPx = printableWidthPt / totalWidth;
     final int sliceHeightPx = (targetChunkHeightPt / scalePtPerPx).round().clamp(1, totalHeight);
 
-    final ui.PictureRecorder recorder = ui.PictureRecorder();
-    final Canvas canvas = Canvas(recorder);
-
+    final List<pw.MemoryImage> pageImages = [];
     int currentY = 0;
-    int pageNumber = 1;
-    final int totalPages = (totalHeight / sliceHeightPx).ceil().clamp(1, 999);
 
     while (currentY < totalHeight) {
       final int currentSliceHeight = (currentY + sliceHeightPx > totalHeight)
@@ -528,47 +524,50 @@ Future<void> exportBoundaryToPdf(
       final ByteData? pageByteData = await pageImg.toByteData(format: ui.ImageByteFormat.png);
 
       if (pageByteData != null) {
-        final pw.MemoryImage pageMemoryImage = pw.MemoryImage(pageByteData.buffer.asUint8List());
-        pdf.addPage(
-          pw.Page(
-            pageFormat: PdfPageFormat.a4,
-            margin: const pw.EdgeInsets.all(16),
-            build: (pw.Context pdfContext) {
-              return pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-                children: [
-                  pw.Expanded(
-                    child: pw.Align(
-                      alignment: pw.Alignment.topCenter,
-                      child: pw.Image(
-                        pageMemoryImage,
-                        fit: pw.BoxFit.contain,
-                      ),
-                    ),
-                  ),
-                  pw.SizedBox(height: 6),
-                  pw.Align(
-                    alignment: pw.Alignment.centerRight,
-                    child: pw.Text(
-                      'Page $pageNumber of $totalPages',
-                      style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-        );
+        pageImages.add(pw.MemoryImage(pageByteData.buffer.asUint8List()));
       }
 
+      pageImg.dispose();
       currentY += currentSliceHeight;
-      pageNumber++;
     }
 
-    // recorder ব্যবহার শেষে নিষ্পত্তি
-    canvas.save();
-    canvas.restore();
-    recorder.endRecording().dispose();
+    decodedImage.dispose();
+
+    final int totalPages = pageImages.length < 1 ? 1 : pageImages.length;
+
+    for (int i = 0; i < pageImages.length; i++) {
+      final int pageNumber = i + 1;
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(14),
+          build: (pw.Context pdfContext) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+              children: [
+                pw.Expanded(
+                  child: pw.Align(
+                    alignment: pw.Alignment.topCenter,
+                    child: pw.Image(
+                      pageImages[i],
+                      fit: pw.BoxFit.contain,
+                    ),
+                  ),
+                ),
+                pw.SizedBox(height: 6),
+                pw.Align(
+                  alignment: pw.Alignment.centerRight,
+                  child: pw.Text(
+                    'Page $pageNumber of $totalPages',
+                    style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    }
 
     Directory? directory;
     if (Platform.isAndroid) {
@@ -2597,39 +2596,39 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         title: Text("${member.name}-এর পূর্ণাঙ্গ হিসাব ও ইতিহাস"),
         content: SizedBox(
           width: double.maxFinite,
-          child: RepaintBoundary(
-            key: memberStatementKey,
-            child: Container(
-              color: Colors.white,
-              padding: const EdgeInsets.all(8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    globalSocietyName,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green),
-                  ),
-                  Text("সদস্য: ${member.name} | আইডি: ${member.id} | মোবাইল: ${member.mobile}"),
-                  const Divider(),
-                  Text("• মূল জমা: ৳${member.deposit.toStringAsFixed(2)}"),
-                  Text("• অর্জিত লাভ: ৳${member.profitEarned.toStringAsFixed(2)}", style: const TextStyle(color: Colors.blue)),
-                  Text("• সর্বমোট ব্যালেন্স: ৳${member.totalBalance.toStringAsFixed(2)}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                  if (member.dueAmount > 0)
-                    Text("• বকেয়া: ৳${member.dueAmount.toStringAsFixed(2)} (${member.dueMonthsCount} মাস)", style: const TextStyle(color: Colors.red))
-                  else if (member.advanceAmount > 0)
-                    Text("• অতিরিক্ত জমা: ৳${member.advanceAmount.toStringAsFixed(2)}", style: const TextStyle(color: Colors.teal))
-                  else
-                    const Text("• বকেয়া: ৳0.00"),
-                  const Divider(),
-                  const Text("🗓 এ পর্যন্ত যতবার ও যত তারিখে কিস্তি/লেনদেন হয়েছে:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.green)),
-                  const SizedBox(height: 6),
-                  SizedBox(
-                    height: 180,
-                    child: member.transactions.isEmpty
+          child: SingleChildScrollView(
+            child: RepaintBoundary(
+              key: memberStatementKey,
+              child: Container(
+                color: Colors.white,
+                padding: const EdgeInsets.all(8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      globalSocietyName,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green),
+                    ),
+                    Text("সদস্য: ${member.name} | আইডি: ${member.id} | মোবাইল: ${member.mobile}"),
+                    const Divider(),
+                    Text("• মূল জমা: ৳${member.deposit.toStringAsFixed(2)}"),
+                    Text("• অর্জিত লাভ: ৳${member.profitEarned.toStringAsFixed(2)}", style: const TextStyle(color: Colors.blue)),
+                    Text("• সর্বমোট ব্যালেন্স: ৳${member.totalBalance.toStringAsFixed(2)}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                    if (member.dueAmount > 0)
+                      Text("• বকেয়া: ৳${member.dueAmount.toStringAsFixed(2)} (${member.dueMonthsCount} মাস)", style: const TextStyle(color: Colors.red))
+                    else if (member.advanceAmount > 0)
+                      Text("• অতিরিক্ত জমা: ৳${member.advanceAmount.toStringAsFixed(2)}", style: const TextStyle(color: Colors.teal))
+                    else
+                      const Text("• বকেয়া: ৳0.00"),
+                    const Divider(),
+                    const Text("🗓 এ পর্যন্ত যতবার ও যত তারিখে কিস্তি/লেনদেন হয়েছে:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.green)),
+                    const SizedBox(height: 6),
+                    member.transactions.isEmpty
                         ? const Center(child: Text("কোনো লেনদেন রেকর্ড নেই।"))
                         : ListView.builder(
                             shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
                             itemCount: member.transactions.length,
                             itemBuilder: (context, idx) {
                               final tx = member.transactions[idx];
@@ -2644,8 +2643,8 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                               );
                             },
                           ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -2753,28 +2752,29 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         title: const Text("📋 সকল সদস্যের সার্বিক স্টেটমেন্ট (ব্যালেন্স, লাভ ও ডিউ)"),
         content: SizedBox(
           width: double.maxFinite,
-          child: RepaintBoundary(
-            key: allMembersBoundaryKey,
-            child: Container(
-              color: Colors.white,
-              padding: const EdgeInsets.all(8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "$globalSocietyName — সকল সদস্যের স্টেটমেন্ট",
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.green),
-                  ),
-                  const SizedBox(height: 8),
-                  globalMembers.isEmpty
-                      ? const Padding(
-                          padding: EdgeInsets.all(20.0),
-                          child: Text("কোনো সদস্যের তথ্য নেই।", textAlign: TextAlign.center),
-                        )
-                      : Flexible(
-                          child: ListView.builder(
+          child: SingleChildScrollView(
+            child: RepaintBoundary(
+              key: allMembersBoundaryKey,
+              child: Container(
+                color: Colors.white,
+                padding: const EdgeInsets.all(8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "$globalSocietyName — সকল সদস্যের স্টেটমেন্ট",
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.green),
+                    ),
+                    const SizedBox(height: 8),
+                    globalMembers.isEmpty
+                        ? const Padding(
+                            padding: EdgeInsets.all(20.0),
+                            child: Text("কোনো সদস্যের তথ্য নেই।", textAlign: TextAlign.center),
+                          )
+                        : ListView.builder(
                             shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
                             itemCount: globalMembers.length,
                             itemBuilder: (context, index) {
                               final m = globalMembers[index];
@@ -2808,8 +2808,8 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                               );
                             },
                           ),
-                        ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -3412,58 +3412,60 @@ class _MemberDashboardState extends State<MemberDashboard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: RepaintBoundary(
-                key: _memberDashBoundaryKey,
-                child: Container(
-                  color: Colors.white,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          color: Colors.green.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.green.shade200),
+              child: SingleChildScrollView(
+                child: RepaintBoundary(
+                  key: _memberDashBoundaryKey,
+                  child: Container(
+                    color: Colors.white,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.green.shade200),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text("👤 ${widget.member.name}-এর খতিয়ান", style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.green)),
+                                  OutlinedButton.icon(
+                                    style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
+                                    onPressed: _showChangePinDialog,
+                                    icon: const Icon(Icons.lock_reset, size: 16),
+                                    label: const Text("পিন বদলান", style: TextStyle(fontSize: 12)),
+                                  ),
+                                ],
+                              ),
+                              const Divider(),
+                              Text("• সদস্য আইডি: ${widget.member.id}", style: const TextStyle(fontSize: 15)),
+                              Text("• মূল সঞ্চয় (কিস্তি জমা): ৳${widget.member.deposit.toStringAsFixed(2)}", style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                              Text("• অর্জিত মোট লাভ: ৳${widget.member.profitEarned.toStringAsFixed(2)}", style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.blue)),
+                              Text("• সর্বমোট ব্যালেন্স: ৳${widget.member.totalBalance.toStringAsFixed(2)}", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
+                              const Divider(),
+                              if (widget.member.dueAmount > 0)
+                                Text("• বকেয়া কিস্তি (${widget.member.dueMonthsCount} মাসের হিসাবে): ৳${widget.member.dueAmount.toStringAsFixed(2)}", style: const TextStyle(fontSize: 15, color: Colors.red, fontWeight: FontWeight.bold))
+                              else if (widget.member.advanceAmount > 0)
+                                Text("• অতিরিক্ত জমা (Advance): ৳${widget.member.advanceAmount.toStringAsFixed(2)}", style: const TextStyle(fontSize: 15, color: Colors.teal, fontWeight: FontWeight.bold))
+                              else
+                                const Text("• বকেয়া: ৳0.00 (পরিশোধিত)", style: const TextStyle(fontSize: 15, color: Colors.green, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text("👤 ${widget.member.name}-এর খতিয়ান", style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.green)),
-                                OutlinedButton.icon(
-                                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
-                                  onPressed: _showChangePinDialog,
-                                  icon: const Icon(Icons.lock_reset, size: 16),
-                                  label: const Text("পিন বদলান", style: TextStyle(fontSize: 12)),
-                                ),
-                              ],
-                            ),
-                            const Divider(),
-                            Text("• সদস্য আইডি: ${widget.member.id}", style: const TextStyle(fontSize: 15)),
-                            Text("• মূল সঞ্চয় (কিস্তি জমা): ৳${widget.member.deposit.toStringAsFixed(2)}", style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                            Text("• অর্জিত মোট লাভ: ৳${widget.member.profitEarned.toStringAsFixed(2)}", style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.blue)),
-                            Text("• সর্বমোট ব্যালেন্স: ৳${widget.member.totalBalance.toStringAsFixed(2)}", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
-                            const Divider(),
-                            if (widget.member.dueAmount > 0)
-                              Text("• বকেয়া কিস্তি (${widget.member.dueMonthsCount} মাসের হিসাবে): ৳${widget.member.dueAmount.toStringAsFixed(2)}", style: const TextStyle(fontSize: 15, color: Colors.red, fontWeight: FontWeight.bold))
-                            else if (widget.member.advanceAmount > 0)
-                              Text("• অতিরিক্ত জমা (Advance): ৳${widget.member.advanceAmount.toStringAsFixed(2)}", style: const TextStyle(fontSize: 15, color: Colors.teal, fontWeight: FontWeight.bold))
-                            else
-                              const Text("• বকেয়া: ৳0.00 (পরিশোধিত)", style: const TextStyle(fontSize: 15, color: Colors.green, fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 15),
-                      const Text("🗓 আপনার জমা ও লাভের হিসাবের ইতিহাস:", style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 10),
-                      Expanded(
-                        child: widget.member.transactions.isEmpty
+                        const SizedBox(height: 15),
+                        const Text("🗓 আপনার জমা ও লাভের হিসাবের ইতিহাস:", style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 10),
+                        widget.member.transactions.isEmpty
                             ? const Center(child: Text("এখনো কোনো জমা এন্ট্রি হয়নি।"))
                             : ListView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
                                 itemCount: widget.member.transactions.length,
                                 itemBuilder: (context, index) {
                                   final tx = widget.member.transactions[index];
@@ -3481,8 +3483,8 @@ class _MemberDashboardState extends State<MemberDashboard> {
                                   );
                                 },
                               ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
