@@ -129,7 +129,7 @@ class PdfReportGenerator {
         border: pw.Border(top: pw.BorderSide(color: PdfColors.grey400, width: 0.5)),
       ),
       child: pw.Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
           pw.Text(
             'প্রিন্ট তারিখ: ${_formatDate(DateTime.now())}',
