@@ -38,6 +38,22 @@ String globalAdminId = 'admin';
 String globalAdminPassword = '1234';
 const String globalAdminRecoveryCode = '97EKTA';
 
+String _formatShortDate(DateTime date) {
+  final String day = date.day.toString().padLeft(2, '0');
+  final String month = date.month.toString().padLeft(2, '0');
+  final String year = (date.year % 100).toString().padLeft(2, '0');
+  return '$day/$month/$year';
+}
+
+String _getMemberStatementDate(Member member) {
+  DateTime targetDate = member.joinDate;
+  if (member.transactions.isNotEmpty) {
+    final nonProfitTxs = member.transactions.where((t) => !t.isProfit).toList();
+    targetDate = nonProfitTxs.isNotEmpty ? nonProfitTxs.last.date : member.transactions.last.date;
+  }
+  return _formatShortDate(targetDate);
+}
+
 class InstallmentSlab {
   final String id;
   DateTime startDate;
@@ -445,6 +461,198 @@ class SamobayFinance {
   }
 }
 
+Future<File> _savePdfDocument(pw.Document pdf, String fileName) async {
+  Directory? directory;
+  if (Platform.isAndroid) {
+    directory = await getExternalStorageDirectory() ?? await getApplicationDocumentsDirectory();
+  } else {
+    directory = await getApplicationDocumentsDirectory();
+  }
+
+  final String actualFileName = fileName.endsWith('.pdf')
+      ? fileName
+      : '${fileName.replaceAll(RegExp(r'\.+$'), '')}.pdf';
+  final File file = File('${directory!.path}/$actualFileName');
+  await file.writeAsBytes(await pdf.save());
+  return file;
+}
+
+/// প্রতিটি সদস্যের তথ্য ও তারিখ (dd/mm/yy) কোনোভাবে মাঝখান দিয়ে না কেটে আলাদা ব্লকে PDF এক্সপোর্ট
+Future<void> exportAllMembersStatementPdf(
+  BuildContext context,
+  List<Member> members,
+  String societyName,
+  String fileName,
+) async {
+  try {
+    final pw.Document pdf = pw.Document();
+    const int membersPerPage = 4;
+    final List<List<Member>> chunks = [];
+
+    if (members.isEmpty) {
+      chunks.add([]);
+    } else {
+      for (int i = 0; i < members.length; i += membersPerPage) {
+        final int end = (i + membersPerPage > members.length) ? members.length : i + membersPerPage;
+        chunks.add(members.sublist(i, end));
+      }
+    }
+
+    final int totalPages = chunks.length;
+
+    for (int pageIndex = 0; pageIndex < chunks.length; pageIndex++) {
+      final List<Member> pageMembers = chunks[pageIndex];
+      final int pageNumber = pageIndex + 1;
+
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(16),
+          build: (pw.Context pdfContext) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+              children: [
+                pw.Container(
+                  padding: const pw.EdgeInsets.only(bottom: 8),
+                  decoration: const pw.BoxDecoration(
+                    border: pw.Border(bottom: pw.BorderSide(color: PdfColors.green700, width: 1.5)),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        societyName,
+                        style: pw.TextStyle(
+                          fontSize: 16,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.green800,
+                        ),
+                      ),
+                      pw.SizedBox(height: 2),
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text(
+                            'সকল সদস্যের স্টেটমেন্ট',
+                            style: pw.TextStyle(
+                              fontSize: 12,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.grey800,
+                            ),
+                          ),
+                          pw.Text(
+                            'তারিখ: ${_formatShortDate(DateTime.now())}',
+                            style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                pw.SizedBox(height: 10),
+                if (pageMembers.isEmpty)
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(20),
+                    child: pw.Text('কোনো সদস্যের তথ্য নেই।', style: const pw.TextStyle(fontSize: 11)),
+                  )
+                else
+                  ...pageMembers.map((m) {
+                    final String memberDateStr = _getMemberStatementDate(m);
+                    final String dueAdvStr = m.dueAmount > 0
+                        ? 'Due: ${m.dueAmount.toStringAsFixed(2)}৳ (${m.dueMonthsCount} মাস)'
+                        : (m.advanceAmount > 0 ? 'Adv: ${m.advanceAmount.toStringAsFixed(2)}৳' : 'Due: ৳0.00');
+
+                    return pw.Container(
+                      margin: const pw.EdgeInsets.only(bottom: 10),
+                      padding: const pw.EdgeInsets.all(10),
+                      decoration: pw.BoxDecoration(
+                        color: PdfColors.grey100,
+                        borderRadius: pw.BorderRadius.circular(6),
+                        border: pw.Border.all(color: PdfColors.grey300),
+                      ),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Row(
+                            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                            children: [
+                              pw.Text(
+                                'ID: ${m.id} | নাম: ${m.name}',
+                                style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
+                              ),
+                              pw.Text(
+                                'তারিখ: $memberDateStr',
+                                style: pw.TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: pw.FontWeight.bold,
+                                  color: PdfColors.teal800,
+                                ),
+                              ),
+                            ],
+                          ),
+                          pw.SizedBox(height: 3),
+                          pw.Text('মোবাইল: ${m.mobile}', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey800)),
+                          pw.Divider(height: 8, color: PdfColors.grey400),
+                          pw.Row(
+                            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                            children: [
+                              pw.Text(
+                                'ব্যালেন্স: ৳${m.totalBalance.toStringAsFixed(2)}',
+                                style: pw.TextStyle(fontSize: 10.5, fontWeight: pw.FontWeight.bold, color: PdfColors.green800),
+                              ),
+                              pw.Text(
+                                'লাভ: ৳${m.profitEarned.toStringAsFixed(2)}',
+                                style: pw.TextStyle(fontSize: 10.5, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800),
+                              ),
+                            ],
+                          ),
+                          pw.SizedBox(height: 4),
+                          pw.Text(
+                            dueAdvStr,
+                            style: pw.TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: pw.FontWeight.bold,
+                              color: m.dueAmount > 0 ? PdfColors.red800 : PdfColors.teal800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                pw.Spacer(),
+                pw.Align(
+                  alignment: pw.Alignment.centerRight,
+                  child: pw.Text(
+                    'Page $pageNumber of $totalPages',
+                    style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    }
+
+    final File file = await _savePdfDocument(pdf, fileName);
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('PDF ফাইল সেভ হয়েছে ($totalPages পেইজ):\n${file.path}')),
+      );
+    }
+
+    await OpenFile.open(file.path);
+  } catch (e) {
+    debugPrint("All Members PDF Save Error: $e");
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('PDF সেভ করতে সমস্যা হয়েছে: $e')),
+      );
+    }
+  }
+}
+
 /// RepaintBoundary দিয়ে রিপোর্ট অংশকে PNG ইমেজে রূপান্তর করে কোনো তথ্য না কেটে ৮–১০ এন্ট্রি পরপর আলাদা পেইজে PDF সেভ ও ওপেন করার ফাংশন
 Future<void> exportBoundaryToPdf(
   BuildContext context,
@@ -484,7 +692,6 @@ Future<void> exportBoundaryToPdf(
     final double printableWidthPt = PdfPageFormat.a4.availableWidth;
     final double printableHeightPt = PdfPageFormat.a4.availableHeight;
 
-    // ৮–১০টি এন্ট্রি পরপর আলাদা পেইজে ভাগ করার জন্য প্রতি পেইজের উচ্চতা নির্ধারণ (কোনো তথ্য বাদ না দিয়ে সম্পূর্ণ অংশ ক্রমান্বয়ে যুক্ত হয়)
     final int safePerPage = itemsPerPage < 8 ? 8 : (itemsPerPage > 10 ? 10 : itemsPerPage);
     final double estimatedRowHeightPt = 72.0;
     final double targetChunkHeightPt = (safePerPage * estimatedRowHeightPt).clamp(360.0, printableHeightPt - 28.0);
@@ -569,18 +776,7 @@ Future<void> exportBoundaryToPdf(
       );
     }
 
-    Directory? directory;
-    if (Platform.isAndroid) {
-      directory = await getExternalStorageDirectory() ?? await getApplicationDocumentsDirectory();
-    } else {
-      directory = await getApplicationDocumentsDirectory();
-    }
-
-    final String actualFileName = fileName.endsWith('.pdf')
-        ? fileName
-        : '${fileName.replaceAll(RegExp(r'\.+$'), '')}.pdf';
-    final File file = File('${directory!.path}/$actualFileName');
-    await file.writeAsBytes(await pdf.save());
+    final File file = await _savePdfDocument(pdf, fileName);
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2744,72 +2940,86 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   }
 
   void _showAllMembersReportDialog() {
-    final GlobalKey allMembersBoundaryKey = GlobalKey();
-
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text("📋 সকল সদস্যের সার্বিক স্টেটমেন্ট (ব্যালেন্স, লাভ ও ডিউ)"),
+        title: const Text("📋 সকল সদস্যের সার্বিক স্টেটমেন্ট"),
         content: SizedBox(
           width: double.maxFinite,
           child: SingleChildScrollView(
-            child: RepaintBoundary(
-              key: allMembersBoundaryKey,
-              child: Container(
-                color: Colors.white,
-                padding: const EdgeInsets.all(8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "$globalSocietyName — সকল সদস্যের স্টেটমেন্ট",
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.green),
-                    ),
-                    const SizedBox(height: 8),
-                    globalMembers.isEmpty
-                        ? const Padding(
-                            padding: EdgeInsets.all(20.0),
-                            child: Text("কোনো সদস্যের তথ্য নেই।", textAlign: TextAlign.center),
-                          )
-                        : ListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: globalMembers.length,
-                            itemBuilder: (context, index) {
-                              final m = globalMembers[index];
-                              String dueAdvStr = m.dueAmount > 0
-                                  ? "Due: ${m.dueAmount.toStringAsFixed(2)}৳ (${m.dueMonthsCount} মাস)"
-                                  : (m.advanceAmount > 0 ? "Adv: ${m.advanceAmount.toStringAsFixed(2)}৳" : "Due: ৳0.00");
+            child: Container(
+              color: Colors.white,
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    globalSocietyName,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green),
+                  ),
+                  const Text(
+                    "সকল সদস্যের স্টেটমেন্ট",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
+                  ),
+                  const SizedBox(height: 8),
+                  globalMembers.isEmpty
+                      ? const Padding(
+                          padding: EdgeInsets.all(20.0),
+                          child: Text("কোনো সদস্যের তথ্য নেই।", textAlign: TextAlign.center),
+                        )
+                      : ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: globalMembers.length,
+                          itemBuilder: (context, index) {
+                            final m = globalMembers[index];
+                            final String memberDateStr = _getMemberStatementDate(m);
+                            String dueAdvStr = m.dueAmount > 0
+                                ? "Due: ${m.dueAmount.toStringAsFixed(2)}৳ (${m.dueMonthsCount} মাস)"
+                                : (m.advanceAmount > 0 ? "Adv: ${m.advanceAmount.toStringAsFixed(2)}৳" : "Due: ৳0.00");
 
-                              return Card(
-                                color: Colors.grey.shade50,
-                                margin: const EdgeInsets.symmetric(vertical: 4),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(10.0),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text("ID: ${m.id} | নাম: ${m.name}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                      Text("মোবাইল: ${m.mobile}"),
-                                      const Divider(height: 6),
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text("ব্যালেন্স: ৳${m.totalBalance.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
-                                          Text("লাভ: ৳${m.profitEarned.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(dueAdvStr, style: TextStyle(fontWeight: FontWeight.bold, color: m.dueAmount > 0 ? Colors.red : Colors.teal)),
-                                    ],
-                                  ),
+                            return Card(
+                              color: Colors.grey.shade50,
+                              margin: const EdgeInsets.symmetric(vertical: 4),
+                              child: Padding(
+                                padding: const EdgeInsets.all(10.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            "ID: ${m.id} | নাম: ${m.name}",
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                          ),
+                                        ),
+                                        Text(
+                                          "তারিখ: $memberDateStr",
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.teal),
+                                        ),
+                                      ],
+                                    ),
+                                    Text("মোবাইল: ${m.mobile}"),
+                                    const Divider(height: 6),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text("ব্যালেন্স: ৳${m.totalBalance.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                                        Text("লাভ: ৳${m.profitEarned.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(dueAdvStr, style: TextStyle(fontWeight: FontWeight.bold, color: m.dueAmount > 0 ? Colors.red : Colors.teal)),
+                                  ],
                                 ),
-                              );
-                            },
-                          ),
-                  ],
-                ),
+                              ),
+                            );
+                          },
+                        ),
+                ],
               ),
             ),
           ),
@@ -2819,11 +3029,11 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
             onPressed: () async {
-              await exportBoundaryToPdf(
+              await exportAllMembersStatementPdf(
                 context,
-                allMembersBoundaryKey,
+                globalMembers,
+                globalSocietyName,
                 "All_Members_Report.pdf",
-                itemsPerPage: 9,
               );
             },
             icon: const Icon(Icons.download, size: 16),
