@@ -206,24 +206,24 @@ class Member {
     return depositTxs.isNotEmpty ? depositTxs.last.amount : 0.0;
   }
 
+  int _effectiveSlabMonths(InstallmentSlab slab, DateTime now) {
+    DateTime effectiveStart = joinDate.isAfter(slab.startDate) ? joinDate : slab.startDate;
+    DateTime effectiveEnd = now.isBefore(slab.endDate) ? now : slab.endDate;
+
+    if (effectiveStart.isBefore(effectiveEnd) || effectiveStart.isAtSameMomentAs(effectiveEnd)) {
+      int months = (effectiveEnd.year - effectiveStart.year) * 12 + (effectiveEnd.month - effectiveStart.month);
+      return months < 0 ? 0 : months + 1;
+    }
+    return 0;
+  }
+
   double get expectedTotalTarget {
     DateTime now = DateTime.now();
     double totalExpected = 0.0;
 
     for (var slab in globalInstallmentSlabs) {
-      DateTime effectiveStart = joinDate.isAfter(slab.startDate) ? joinDate : slab.startDate;
-      DateTime effectiveEnd = now.isBefore(slab.endDate) ? now : slab.endDate;
-
-      if (effectiveStart.isBefore(effectiveEnd) || effectiveStart.isAtSameMomentAs(effectiveEnd)) {
-        int months = (effectiveEnd.year - effectiveStart.year) * 12 + (effectiveEnd.month - effectiveStart.month);
-        if (months < 0) {
-          months = 0;
-        } else {
-          months += 1;
-        }
-
-        totalExpected += (months * slab.amount);
-      }
+      int months = _effectiveSlabMonths(slab, now);
+      totalExpected += (months * slab.amount);
     }
     return totalExpected;
   }
@@ -236,40 +236,41 @@ class Member {
     if (dueAmount <= 0 || globalInstallmentSlabs.isEmpty) return 0;
 
     DateTime now = DateTime.now();
+
+    // কোনো জমা না থাকলে (এবং পুরো টার্গেট বকেয়া থাকলে) চলমান মাস পর্যন্ত মোট কার্যকর মাস (যেমন ৯৫ মাস) দেখানো হবে
+    if (deposit <= 0 && dueAmount >= expectedTotalTarget) {
+      int totalActiveMonths = 0;
+      for (var slab in globalInstallmentSlabs) {
+        totalActiveMonths += _effectiveSlabMonths(slab, now);
+      }
+      return totalActiveMonths;
+    }
+
     double remainingDue = dueAmount;
     int countedMonths = 0;
 
-    // স্লাবগুলো শেষ থেকে শুরুর দিকে (সাম্প্রতিক মাস থেকে পেছনে) হিসাব করা হচ্ছে
+    // স্লাবগুলো শেষ থেকে শুরুর দিকে (চলমান মাস থেকে পেছনে) পূর্ণ কিস্তির মাসে হিসাব করা হচ্ছে
     for (var slab in globalInstallmentSlabs.reversed) {
       if (remainingDue <= 0) break;
       if (slab.amount <= 0) continue;
 
-      DateTime effectiveStart = joinDate.isAfter(slab.startDate) ? joinDate : slab.startDate;
-      DateTime effectiveEnd = now.isBefore(slab.endDate) ? now : slab.endDate;
+      int slabMonths = _effectiveSlabMonths(slab, now);
+      if (slabMonths <= 0) continue;
 
-      if (effectiveStart.isBefore(effectiveEnd) || effectiveStart.isAtSameMomentAs(effectiveEnd)) {
-        int slabMonths = (effectiveEnd.year - effectiveStart.year) * 12 + (effectiveEnd.month - effectiveStart.month);
-        if (slabMonths < 0) {
-          slabMonths = 0;
-        } else {
-          slabMonths += 1;
-        }
-
-        double maxSlabValue = slabMonths * slab.amount;
-        if (remainingDue >= maxSlabValue) {
-          countedMonths += slabMonths;
-          remainingDue -= maxSlabValue;
-        } else {
-          int partialMonths = (remainingDue / slab.amount).ceil();
-          countedMonths += partialMonths;
-          remainingDue = 0.0;
-        }
+      double maxSlabValue = slabMonths * slab.amount;
+      if (remainingDue >= maxSlabValue) {
+        countedMonths += slabMonths;
+        remainingDue -= maxSlabValue;
+      } else {
+        int fullMonths = (remainingDue / slab.amount).floor();
+        countedMonths += fullMonths;
+        remainingDue = double.parse((remainingDue - (fullMonths * slab.amount)).toStringAsFixed(2));
       }
     }
 
     if (remainingDue > 0) {
       double fallbackRate = globalInstallmentSlabs.last.amount > 0 ? globalInstallmentSlabs.last.amount : 1.0;
-      countedMonths += (remainingDue / fallbackRate).ceil();
+      countedMonths += (remainingDue / fallbackRate).floor();
     }
 
     return countedMonths;
