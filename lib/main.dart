@@ -38,6 +38,22 @@ String globalAdminId = 'admin';
 String globalAdminPassword = '1234';
 const String globalAdminRecoveryCode = '97EKTA';
 
+String _formatShortDate(DateTime date) {
+  final String day = date.day.toString().padLeft(2, '0');
+  final String month = date.month.toString().padLeft(2, '0');
+  final String year = (date.year % 100).toString().padLeft(2, '0');
+  return '$day/$month/$year';
+}
+
+String _getMemberStatementDate(Member member) {
+  DateTime targetDate = member.joinDate;
+  if (member.transactions.isNotEmpty) {
+    final nonProfitTxs = member.transactions.where((t) => !t.isProfit).toList();
+    targetDate = nonProfitTxs.isNotEmpty ? nonProfitTxs.last.date : member.transactions.last.date;
+  }
+  return _formatShortDate(targetDate);
+}
+
 class InstallmentSlab {
   final String id;
   DateTime startDate;
@@ -239,7 +255,6 @@ class Member {
     double remainingDeposit = deposit > 0 ? deposit : 0.0;
     int totalDueMonths = 0;
 
-    // শুরু থেকে স্লাব ধরে জমা সমন্বয় করে প্রতিটি স্লাবের অবশিষ্ট বকেয়া মাস যোগ করা হচ্ছে (যেমন: ৫৮ + ৩৫ = ৯৩ মাস)
     for (var slab in globalInstallmentSlabs) {
       int slabMonths = _effectiveSlabMonths(slab, now);
       if (slabMonths <= 0) continue;
@@ -445,116 +460,126 @@ class SamobayFinance {
   }
 }
 
-/// RepaintBoundary দিয়ে রিপোর্ট অংশকে PNG ইমেজে রূপান্তর করে কোনো তথ্য না কেটে ৮–১০ এন্ট্রি পরপর আলাদা পেইজে PDF সেভ ও ওপেন করার ফাংশন
-Future<void> exportBoundaryToPdf(
+Future<File> _savePdfDocument(pw.Document pdf, String fileName) async {
+  Directory? directory;
+  if (Platform.isAndroid) {
+    directory = await getExternalStorageDirectory() ?? await getApplicationDocumentsDirectory();
+  } else {
+    directory = await getApplicationDocumentsDirectory();
+  }
+
+  final String actualFileName = fileName.endsWith('.pdf')
+      ? fileName
+      : '${fileName.replaceAll(RegExp(r'\.+$'), '')}.pdf';
+  final File file = File('${directory!.path}/$actualFileName');
+  await file.writeAsBytes(await pdf.save());
+  return file;
+}
+
+/// প্রতিটি আলাদা কার্ড/এন্ট্রি ব্লককে অখণ্ডভাবে ক্যাপচার করে A4 পেজে উচ্চতা অনুযায়ী সাজায় যাতে কোনো লেখা বা তারিখ না কাটে
+Future<void> exportBlocksToPdf(
   BuildContext context,
-  GlobalKey boundaryKey,
+  List<GlobalKey> blockKeys,
   String fileName, {
-  int itemsPerPage = 9,
+  int maxItemsPerPage = 6,
 }) async {
   try {
-    final RenderRepaintBoundary? boundary =
-        boundaryKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+    final List<Uint8List> rawPngs = [];
+    final List<double> heightsPt = [];
 
-    if (boundary == null) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('রিপোর্ট কন্টেন্ট লোড হয়নি, অনুগ্রহ করে আবার চেষ্টা করুন।')),
-        );
+    final double maxWidthPt = PdfPageFormat.a4.availableWidth;
+    final double usableHeightPt = PdfPageFormat.a4.availableHeight - 36.0;
+
+    for (final key in blockKeys) {
+      final RenderRepaintBoundary? boundary =
+          key.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+
+      if (boundary != null && boundary.size.width > 0 && boundary.size.height > 0) {
+        final double aspectRatio = boundary.size.width / boundary.size.height;
+        final ui.Image img = await boundary.toImage(pixelRatio: 2.2);
+        final ByteData? byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+        img.dispose();
+
+        if (byteData != null) {
+          final double naturalHeightPt = (maxWidthPt / aspectRatio).clamp(26.0, usableHeightPt * 0.45);
+          rawPngs.add(byteData.buffer.asUint8List());
+          heightsPt.add(naturalHeightPt);
+        }
       }
-      return;
     }
-
-    final ui.Image image = await boundary.toImage(pixelRatio: 2.0);
-    final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-
-    if (byteData == null) {
-      throw Exception("PNG byte conversion failed");
-    }
-
-    final Uint8List pngBytes = byteData.buffer.asUint8List();
-    final ui.Codec codec = await ui.instantiateImageCodec(pngBytes);
-    final ui.FrameInfo frameInfo = await codec.getNextFrame();
-    final ui.Image decodedImage = frameInfo.image;
-
-    final int totalWidth = decodedImage.width;
-    final int totalHeight = decodedImage.height;
 
     final pw.Document pdf = pw.Document();
-    final double printableWidthPt = PdfPageFormat.a4.availableWidth;
-    final double printableHeightPt = PdfPageFormat.a4.availableHeight;
+    final List<List<int>> pages = [];
+    List<int> currentPage = [];
+    double currentUsedHeight = 0.0;
+    const double spacingPt = 6.0;
 
-    // ৮–১০টি এন্ট্রি পরপর আলাদা পেইজে ভাগ করার জন্য প্রতি পেইজের উচ্চতা নির্ধারণ (কোনো তথ্য বাদ না দিয়ে সম্পূর্ণ অংশ ক্রমান্বয়ে যুক্ত হয়)
-    final int safePerPage = itemsPerPage < 8 ? 8 : (itemsPerPage > 10 ? 10 : itemsPerPage);
-    final double estimatedRowHeightPt = 72.0;
-    final double targetChunkHeightPt = (safePerPage * estimatedRowHeightPt).clamp(360.0, printableHeightPt - 28.0);
-    final double scalePtPerPx = printableWidthPt / totalWidth;
-    final int sliceHeightPx = (targetChunkHeightPt / scalePtPerPx).round().clamp(1, totalHeight);
+    for (int i = 0; i < rawPngs.length; i++) {
+      final double itemH = heightsPt[i] + spacingPt;
+      final bool exceedsHeight = (currentUsedHeight + itemH) > usableHeightPt;
+      final bool exceedsCount = currentPage.length >= maxItemsPerPage;
 
-    final List<pw.MemoryImage> pageImages = [];
-    int currentY = 0;
-
-    while (currentY < totalHeight) {
-      final int currentSliceHeight = (currentY + sliceHeightPx > totalHeight)
-          ? (totalHeight - currentY)
-          : sliceHeightPx;
-
-      final ui.PictureRecorder pageRecorder = ui.PictureRecorder();
-      final Canvas pageCanvas = Canvas(pageRecorder);
-      pageCanvas.drawColor(Colors.white, BlendMode.src);
-
-      final Rect srcRect = Rect.fromLTWH(
-        0,
-        currentY.toDouble(),
-        totalWidth.toDouble(),
-        currentSliceHeight.toDouble(),
-      );
-      final Rect dstRect = Rect.fromLTWH(
-        0,
-        0,
-        totalWidth.toDouble(),
-        currentSliceHeight.toDouble(),
-      );
-      pageCanvas.drawImageRect(decodedImage, srcRect, dstRect, Paint());
-
-      final ui.Image pageImg = await pageRecorder.endRecording().toImage(
-            totalWidth,
-            currentSliceHeight,
-          );
-      final ByteData? pageByteData = await pageImg.toByteData(format: ui.ImageByteFormat.png);
-
-      if (pageByteData != null) {
-        pageImages.add(pw.MemoryImage(pageByteData.buffer.asUint8List()));
+      if (currentPage.isNotEmpty && (exceedsHeight || exceedsCount)) {
+        pages.add(currentPage);
+        currentPage = [];
+        currentUsedHeight = 0.0;
       }
 
-      pageImg.dispose();
-      currentY += currentSliceHeight;
+      currentPage.add(i);
+      currentUsedHeight += itemH;
     }
 
-    decodedImage.dispose();
+    if (currentPage.isNotEmpty || rawPngs.isEmpty) {
+      pages.add(currentPage);
+    }
 
-    final int totalPages = pageImages.length < 1 ? 1 : pageImages.length;
+    final int totalPages = pages.length;
 
-    for (int i = 0; i < pageImages.length; i++) {
-      final int pageNumber = i + 1;
+    for (int p = 0; p < pages.length; p++) {
+      final List<int> indices = pages[p];
+      final int pageNumber = p + 1;
+
       pdf.addPage(
         pw.Page(
           pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.all(14),
+          margin: const pw.EdgeInsets.fromLTRB(16, 12, 16, 12),
           build: (pw.Context pdfContext) {
             return pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.stretch,
               children: [
-                pw.Expanded(
-                  child: pw.Align(
-                    alignment: pw.Alignment.topCenter,
-                    child: pw.Image(
-                      pageImages[i],
-                      fit: pw.BoxFit.contain,
+                pw.Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const pw.Text(
+                      'Samobay Statement Report',
+                      style: pw.TextStyle(fontSize: 10.5, color: PdfColors.grey700),
                     ),
-                  ),
+                    pw.Text(
+                      'Date: ${_formatShortDate(DateTime.now())}',
+                      style: const pw.TextStyle(fontSize: 9.5, color: PdfColors.grey700),
+                    ),
+                  ],
                 ),
-                pw.SizedBox(height: 6),
+                pw.Divider(height: 8, color: PdfColors.green700),
+                if (indices.isEmpty)
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(20),
+                    child: pw.Text('No records found.', style: const pw.TextStyle(fontSize: 11)),
+                  )
+                else
+                  ...indices.map((idx) {
+                    return pw.Container(
+                      margin: const pw.EdgeInsets.only(bottom: 6),
+                      height: heightsPt[idx],
+                      width: maxWidthPt,
+                      alignment: pw.Alignment.centerLeft,
+                      child: pw.Image(
+                        pw.MemoryImage(rawPngs[idx]),
+                        fit: pw.BoxFit.contain,
+                      ),
+                    );
+                  }),
+                pw.Spacer(),
                 pw.Align(
                   alignment: pw.Alignment.centerRight,
                   child: pw.Text(
@@ -569,18 +594,7 @@ Future<void> exportBoundaryToPdf(
       );
     }
 
-    Directory? directory;
-    if (Platform.isAndroid) {
-      directory = await getExternalStorageDirectory() ?? await getApplicationDocumentsDirectory();
-    } else {
-      directory = await getApplicationDocumentsDirectory();
-    }
-
-    final String actualFileName = fileName.endsWith('.pdf')
-        ? fileName
-        : '${fileName.replaceAll(RegExp(r'\.+$'), '')}.pdf';
-    final File file = File('${directory!.path}/$actualFileName');
-    await file.writeAsBytes(await pdf.save());
+    final File file = await _savePdfDocument(pdf, fileName);
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -590,13 +604,28 @@ Future<void> exportBoundaryToPdf(
 
     await OpenFile.open(file.path);
   } catch (e) {
-    debugPrint("PDF Save Error: $e");
+    debugPrint("Block PDF Export Error: $e");
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('PDF সেভ করতে সমস্যা হয়েছে: $e')),
       );
     }
   }
+}
+
+/// বাকি স্ক্রিন অংশের জন্য ব্যাকআপ ব্লক-ভিত্তিক এক্সপোর্ট
+Future<void> exportBoundaryToPdf(
+  BuildContext context,
+  GlobalKey boundaryKey,
+  String fileName, {
+  int itemsPerPage = 7,
+}) async {
+  await exportBlocksToPdf(
+    context,
+    [boundaryKey],
+    fileName,
+    maxItemsPerPage: itemsPerPage,
+  );
 }
 
 class SplashScreen extends StatefulWidget {
@@ -1082,7 +1111,6 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   void _showMonthlyReportDialog() {
     int selectedYear = DateTime.now().year;
     int selectedMonth = DateTime.now().month;
-    final GlobalKey monthlyBoundaryKey = GlobalKey();
 
     showDialog(
       context: context,
@@ -1120,6 +1148,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           double monthlyBizExpense = monthBizRecords.where((r) => !r.isIncome).fold(0.0, (sum, r) => sum + r.amount);
 
           String monthLabel = "${_getBengaliMonthName(selectedMonth)} $selectedYear";
+
+          final GlobalKey summaryKey = GlobalKey();
+          final List<GlobalKey> memberTxKeys =
+              List.generate(memberMonthEntries.length, (_) => GlobalKey());
+          final List<GlobalKey> bizKeys =
+              List.generate(monthBizRecords.length, (_) => GlobalKey());
 
           return AlertDialog(
             title: const Text("🗓 মাস ভিত্তিক রিপোর্ট"),
@@ -1182,90 +1216,107 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    RepaintBoundary(
-                      key: monthlyBoundaryKey,
-                      child: Container(
-                        color: Colors.white,
-                        padding: const EdgeInsets.all(10),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              globalSocietyName,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green),
-                            ),
-                            const SizedBox(height: 6),
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              width: double.infinity,
-                              decoration: BoxDecoration(
-                                color: Colors.teal.shade50,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.teal.shade200),
-                              ),
+                    Container(
+                      color: Colors.white,
+                      padding: const EdgeInsets.all(8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          RepaintBoundary(
+                            key: summaryKey,
+                            child: Container(
+                              color: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 4),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text("সারসংক্ষেপ — $monthLabel", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.teal)),
-                                  const Divider(),
-                                  Text("• মোট কিস্তি জমা: ৳${monthlyDepositTotal.toStringAsFixed(2)} ($monthlyDepositCountটি)", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
-                                  Text("• মোট লাভ বণ্টন: ৳${monthlyProfitTotal.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
-                                  Text("• ব্যবসায়িক আয়: ৳${monthlyBizIncome.toStringAsFixed(2)}", style: const TextStyle(color: Colors.green)),
-                                  Text("• প্রজেক্ট খরচ: ৳${monthlyBizExpense.toStringAsFixed(2)}", style: const TextStyle(color: Colors.red)),
+                                  Text(
+                                    globalSocietyName,
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    width: double.infinity,
+                                    decoration: BoxDecoration(
+                                      color: Colors.teal.shade50,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.teal.shade200),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text("সারসংক্ষেপ — $monthLabel", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.teal)),
+                                        const Divider(),
+                                        Text("• মোট কিস্তি জমা: ৳${monthlyDepositTotal.toStringAsFixed(2)} ($monthlyDepositCountটি)", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                                        Text("• মোট লাভ বণ্টন: ৳${monthlyProfitTotal.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                                        Text("• ব্যবসায়িক আয়: ৳${monthlyBizIncome.toStringAsFixed(2)}", style: const TextStyle(color: Colors.green)),
+                                        Text("• প্রজেক্ট খরচ: ৳${monthlyBizExpense.toStringAsFixed(2)}", style: const TextStyle(color: Colors.red)),
+                                      ],
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
-                            const SizedBox(height: 12),
-                            const Text("সদস্যদের লেনদেনসমূহ:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                            const SizedBox(height: 6),
-                            memberMonthEntries.isEmpty
-                                ? const Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 8),
-                                    child: Text("এই মাসে কোনো সদস্যের লেনদেন নেই।", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                                  )
-                                : ListView.builder(
-                                    shrinkWrap: true,
-                                    physics: const NeverScrollableScrollPhysics(),
-                                    itemCount: memberMonthEntries.length,
-                                    itemBuilder: (context, idx) {
-                                      Member m = memberMonthEntries[idx]['member'];
-                                      TransactionHistory t = memberMonthEntries[idx]['tx'];
-                                      return Card(
+                          ),
+                          const SizedBox(height: 12),
+                          const Text("সদস্যদের লেনদেনসমূহ:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          const SizedBox(height: 6),
+                          memberMonthEntries.isEmpty
+                              ? const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 8),
+                                  child: Text("এই মাসে কোনো সদস্যের লেনদেন নেই।", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                )
+                              : ListView.builder(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  itemCount: memberMonthEntries.length,
+                                  itemBuilder: (context, idx) {
+                                    Member m = memberMonthEntries[idx]['member'];
+                                    TransactionHistory t = memberMonthEntries[idx]['tx'];
+                                    return RepaintBoundary(
+                                      key: memberTxKeys[idx],
+                                      child: Card(
+                                        color: Colors.white,
                                         margin: const EdgeInsets.symmetric(vertical: 3),
                                         child: ListTile(
                                           dense: true,
                                           title: Text("${m.name} (ID: ${m.id}) — ৳${t.amount.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold)),
-                                          subtitle: Text("${t.date.day}/${t.date.month}/${t.date.year} | ${t.isProfit ? 'লাভ বণ্টন' : t.paymentMethod}"),
+                                          subtitle: Text("তারিখ: ${_formatShortDate(t.date)} | ${t.isProfit ? 'লাভ বণ্টন' : t.paymentMethod}"),
                                         ),
-                                      );
-                                    },
-                                  ),
-                            const SizedBox(height: 10),
-                            const Text("ব্যবসার আয়-ব্যয় পোস্টিং:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                            const SizedBox(height: 6),
-                            monthBizRecords.isEmpty
-                                ? const Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 8),
-                                    child: Text("এই মাসে কোনো ব্যবসায়িক পোস্টিং নেই।", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                                  )
-                                : ListView.builder(
-                                    shrinkWrap: true,
-                                    physics: const NeverScrollableScrollPhysics(),
-                                    itemCount: monthBizRecords.length,
-                                    itemBuilder: (context, idx) {
-                                      final r = monthBizRecords[idx];
-                                      return Card(
+                                      ),
+                                    );
+                                  },
+                                ),
+                          const SizedBox(height: 10),
+                          const Text("ব্যবসার আয়-ব্যয় পোস্টিং:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          const SizedBox(height: 6),
+                          monthBizRecords.isEmpty
+                              ? const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 8),
+                                  child: Text("এই মাসে কোনো ব্যবসায়িক পোস্টিং নেই।", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                )
+                              : ListView.builder(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  itemCount: monthBizRecords.length,
+                                  itemBuilder: (context, idx) {
+                                    final r = monthBizRecords[idx];
+                                    return RepaintBoundary(
+                                      key: bizKeys[idx],
+                                      child: Card(
+                                        color: Colors.white,
                                         margin: const EdgeInsets.symmetric(vertical: 3),
                                         child: ListTile(
                                           dense: true,
                                           title: Text("${r.title} (${r.isIncome ? '+' : '-'}৳${r.amount.toStringAsFixed(2)})", style: TextStyle(fontWeight: FontWeight.bold, color: r.isIncome ? Colors.green : Colors.red)),
-                                          subtitle: Text("তারিখ: ${r.date.day}/${r.date.month}/${r.date.year}"),
+                                          subtitle: Text("তারিখ: ${_formatShortDate(r.date)}"),
                                         ),
-                                      );
-                                    },
-                                  ),
-                          ],
-                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                        ],
                       ),
                     ),
                   ],
@@ -1277,11 +1328,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
                 onPressed: () async {
-                  await exportBoundaryToPdf(
+                  final allKeys = [summaryKey, ...memberTxKeys, ...bizKeys];
+                  await exportBlocksToPdf(
                     context,
-                    monthlyBoundaryKey,
+                    allKeys,
                     "Monthly_Report_${selectedMonth}_${selectedYear}.pdf",
-                    itemsPerPage: 9,
+                    maxItemsPerPage: 7,
                   );
                 },
                 icon: const Icon(Icons.download, size: 16),
@@ -1861,65 +1913,78 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   }
 
   void _showManageBusinessRecordsDialog() {
-    final GlobalKey bizBoundaryKey = GlobalKey();
-
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) {
+          final GlobalKey summaryKey = GlobalKey();
+          final List<GlobalKey> recordKeys =
+              List.generate(globalBusinessRecords.length, (_) => GlobalKey());
+
           return AlertDialog(
             title: const Text("📊 ব্যবসার লাভ-ক্ষতি খতিয়ান ও রিপোর্ট"),
             content: SizedBox(
               width: double.maxFinite,
               child: SingleChildScrollView(
-                child: RepaintBoundary(
-                  key: bizBoundaryKey,
-                  child: Container(
-                    color: Colors.white,
-                    padding: const EdgeInsets.all(8),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          globalSocietyName,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green),
-                        ),
-                        const SizedBox(height: 6),
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          color: Colors.green.shade50,
+                child: Container(
+                  color: Colors.white,
+                  padding: const EdgeInsets.all(8),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      RepaintBoundary(
+                        key: summaryKey,
+                        child: Container(
+                          color: Colors.white,
+                          padding: const EdgeInsets.only(bottom: 4),
                           child: Column(
                             children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text("চলমান মুনাফা: ৳${SamobayFinance.currentBusinessIncome.toStringAsFixed(2)}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                                  Text("চলমান খরচ: ৳${SamobayFinance.currentBusinessExpense.toStringAsFixed(2)}", style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                                ],
+                              Text(
+                                globalSocietyName,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green),
                               ),
-                              const Divider(),
-                              Text("অবশিষ্ট বণ্টনযোগ্য নিট লাভ: ৳${SamobayFinance.currentNetProfit.toStringAsFixed(2)}", style: const TextStyle(fontSize: 15, color: Colors.blue, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 6),
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                color: Colors.green.shade50,
+                                child: Column(
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text("চলমান মুনাফা: ৳${SamobayFinance.currentBusinessIncome.toStringAsFixed(2)}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                                        Text("চলমান খরচ: ৳${SamobayFinance.currentBusinessExpense.toStringAsFixed(2)}", style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                                      ],
+                                    ),
+                                    const Divider(),
+                                    Text("অবশিষ্ট বণ্টনযোগ্য নিট লাভ: ৳${SamobayFinance.currentNetProfit.toStringAsFixed(2)}", style: const TextStyle(fontSize: 15, color: Colors.blue, fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                              ),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        const Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text("🗓 তারিখভিত্তিক পোস্টিং এর বিস্তারিত তালিকা:", style: TextStyle(fontWeight: FontWeight.bold)),
-                        ),
-                        const SizedBox(height: 8),
-                        globalBusinessRecords.isEmpty
-                            ? const Padding(
-                                padding: EdgeInsets.all(20.0),
-                                child: Text("এখনো কোনো লাভ বা খরচের পোস্টিং দেওয়া হয়নি।", textAlign: TextAlign.center),
-                              )
-                            : ListView.builder(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                itemCount: globalBusinessRecords.length,
-                                itemBuilder: (context, index) {
-                                  final record = globalBusinessRecords[index];
-                                  return Card(
+                      ),
+                      const SizedBox(height: 12),
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text("🗓 তারিখভিত্তিক পোস্টিং এর বিস্তারিত তালিকা:", style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                      const SizedBox(height: 8),
+                      globalBusinessRecords.isEmpty
+                          ? const Padding(
+                              padding: EdgeInsets.all(20.0),
+                              child: Text("এখনো কোনো লাভ বা খরচের পোস্টিং দেওয়া হয়নি।", textAlign: TextAlign.center),
+                            )
+                          : ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: globalBusinessRecords.length,
+                              itemBuilder: (context, index) {
+                                final record = globalBusinessRecords[index];
+                                return RepaintBoundary(
+                                  key: recordKeys[index],
+                                  child: Card(
                                     color: record.isSettled ? Colors.grey.shade100 : Colors.white,
                                     margin: const EdgeInsets.symmetric(vertical: 6),
                                     child: Padding(
@@ -1949,7 +2014,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                                 ),
                                                 const SizedBox(height: 2),
                                                 Text(
-                                                  "তারিখ: ${record.date.day}/${record.date.month}/${record.date.year} | ধরন: ${record.isIncome ? 'লাভ (+)' : 'খরচ (-)'}",
+                                                  "তারিখ: ${_formatShortDate(record.date)} | ধরন: ${record.isIncome ? 'লাভ (+)' : 'খরচ (-)'}",
                                                   style: const TextStyle(fontSize: 12, color: Colors.grey),
                                                 ),
                                               ],
@@ -1988,11 +2053,11 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                         ],
                                       ),
                                     ),
-                                  );
-                                },
-                              ),
-                      ],
-                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ],
                   ),
                 ),
               ),
@@ -2005,11 +2070,11 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
                 onPressed: () async {
-                  await exportBoundaryToPdf(
+                  await exportBlocksToPdf(
                     context,
-                    bizBoundaryKey,
+                    [summaryKey, ...recordKeys],
                     "Business_Ledger_${DateTime.now().millisecondsSinceEpoch}.pdf",
-                    itemsPerPage: 9,
+                    maxItemsPerPage: 6,
                   );
                 },
                 icon: const Icon(Icons.download, size: 16),
@@ -2281,7 +2346,6 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         }
       }
 
-      // আগের ব্যাচগুলো লক থাকবে; সর্বশেষ ব্যাচ রিভার্স হওয়ার পর আর কোনো রিভার্স নয়
       lastDistributionBatchId = null;
     });
 
@@ -2588,7 +2652,8 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   }
 
   void _showMemberStatementDialog(Member member) {
-    final GlobalKey memberStatementKey = GlobalKey();
+    final GlobalKey headerKey = GlobalKey();
+    final List<GlobalKey> txKeys = List.generate(member.transactions.length, (_) => GlobalKey());
 
     showDialog(
       context: context,
@@ -2597,54 +2662,66 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         content: SizedBox(
           width: double.maxFinite,
           child: SingleChildScrollView(
-            child: RepaintBoundary(
-              key: memberStatementKey,
-              child: Container(
-                color: Colors.white,
-                padding: const EdgeInsets.all(8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      globalSocietyName,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green),
+            child: Container(
+              color: Colors.white,
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  RepaintBoundary(
+                    key: headerKey,
+                    child: Container(
+                      color: Colors.white,
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            globalSocietyName,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green),
+                          ),
+                          Text("সদস্য: ${member.name} | আইডি: ${member.id} | মোবাইল: ${member.mobile}"),
+                          const Divider(),
+                          Text("• মূল জমা: ৳${member.deposit.toStringAsFixed(2)}"),
+                          Text("• অর্জিত লাভ: ৳${member.profitEarned.toStringAsFixed(2)}", style: const TextStyle(color: Colors.blue)),
+                          Text("• সর্বমোট ব্যালেন্স: ৳${member.totalBalance.toStringAsFixed(2)}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                          if (member.dueAmount > 0)
+                            Text("• বকেয়া: ৳${member.dueAmount.toStringAsFixed(2)} (${member.dueMonthsCount} মাস)", style: const TextStyle(color: Colors.red))
+                          else if (member.advanceAmount > 0)
+                            Text("• অতিরিক্ত জমা: ৳${member.advanceAmount.toStringAsFixed(2)}", style: const TextStyle(color: Colors.teal))
+                          else
+                            const Text("• বকেয়া: ৳0.00"),
+                          const Divider(),
+                          const Text("🗓 এ পর্যন্ত যতবার ও যত তারিখে কিস্তি/লেনদেন হয়েছে:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.green)),
+                        ],
+                      ),
                     ),
-                    Text("সদস্য: ${member.name} | আইডি: ${member.id} | মোবাইল: ${member.mobile}"),
-                    const Divider(),
-                    Text("• মূল জমা: ৳${member.deposit.toStringAsFixed(2)}"),
-                    Text("• অর্জিত লাভ: ৳${member.profitEarned.toStringAsFixed(2)}", style: const TextStyle(color: Colors.blue)),
-                    Text("• সর্বমোট ব্যালেন্স: ৳${member.totalBalance.toStringAsFixed(2)}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                    if (member.dueAmount > 0)
-                      Text("• বকেয়া: ৳${member.dueAmount.toStringAsFixed(2)} (${member.dueMonthsCount} মাস)", style: const TextStyle(color: Colors.red))
-                    else if (member.advanceAmount > 0)
-                      Text("• অতিরিক্ত জমা: ৳${member.advanceAmount.toStringAsFixed(2)}", style: const TextStyle(color: Colors.teal))
-                    else
-                      const Text("• বকেয়া: ৳0.00"),
-                    const Divider(),
-                    const Text("🗓 এ পর্যন্ত যতবার ও যত তারিখে কিস্তি/লেনদেন হয়েছে:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.green)),
-                    const SizedBox(height: 6),
-                    member.transactions.isEmpty
-                        ? const Center(child: Text("কোনো লেনদেন রেকর্ড নেই।"))
-                        : ListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: member.transactions.length,
-                            itemBuilder: (context, idx) {
-                              final tx = member.transactions[idx];
-                              return Card(
+                  ),
+                  const SizedBox(height: 6),
+                  member.transactions.isEmpty
+                      ? const Center(child: Text("কোনো লেনদেন রেকর্ড নেই।"))
+                      : ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: member.transactions.length,
+                          itemBuilder: (context, idx) {
+                            final tx = member.transactions[idx];
+                            return RepaintBoundary(
+                              key: txKeys[idx],
+                              child: Card(
                                 color: Colors.grey.shade50,
                                 margin: const EdgeInsets.symmetric(vertical: 2),
                                 child: ListTile(
                                   dense: true,
-                                  title: Text("${tx.date.day}/${tx.date.month}/${tx.date.year} — ৳${tx.amount.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  title: Text("${_formatShortDate(tx.date)} — ৳${tx.amount.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold)),
                                   subtitle: Text("${tx.paymentMethod} ${tx.trxId.isNotEmpty ? '(Trx: ${tx.trxId})' : ''}"),
                                 ),
-                              );
-                            },
-                          ),
-                  ],
-                ),
+                              ),
+                            );
+                          },
+                        ),
+                ],
               ),
             ),
           ),
@@ -2654,11 +2731,11 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
             onPressed: () async {
-              await exportBoundaryToPdf(
+              await exportBlocksToPdf(
                 context,
-                memberStatementKey,
+                [headerKey, ...txKeys],
                 "Member_${member.name}_Statement.pdf",
-                itemsPerPage: 9,
+                maxItemsPerPage: 7,
               );
             },
             icon: const Icon(Icons.download, size: 16),
@@ -2744,45 +2821,63 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   }
 
   void _showAllMembersReportDialog() {
-    final GlobalKey allMembersBoundaryKey = GlobalKey();
+    final GlobalKey headerBoundaryKey = GlobalKey();
+    final List<GlobalKey> cardKeys = List.generate(globalMembers.length, (_) => GlobalKey());
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text("📋 সকল সদস্যের সার্বিক স্টেটমেন্ট (ব্যালেন্স, লাভ ও ডিউ)"),
+        title: const Text("📋 সকল সদস্যের সার্বিক স্টেটমেন্ট"),
         content: SizedBox(
           width: double.maxFinite,
           child: SingleChildScrollView(
-            child: RepaintBoundary(
-              key: allMembersBoundaryKey,
-              child: Container(
-                color: Colors.white,
-                padding: const EdgeInsets.all(8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "$globalSocietyName — সকল সদস্যের স্টেটমেন্ট",
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.green),
+            child: Container(
+              color: Colors.white,
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  RepaintBoundary(
+                    key: headerBoundaryKey,
+                    child: Container(
+                      color: Colors.white,
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            globalSocietyName,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green),
+                          ),
+                          const Text(
+                            "সকল সদস্যের স্টেটমেন্ট",
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 8),
-                    globalMembers.isEmpty
-                        ? const Padding(
-                            padding: EdgeInsets.all(20.0),
-                            child: Text("কোনো সদস্যের তথ্য নেই।", textAlign: TextAlign.center),
-                          )
-                        : ListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: globalMembers.length,
-                            itemBuilder: (context, index) {
-                              final m = globalMembers[index];
-                              String dueAdvStr = m.dueAmount > 0
-                                  ? "Due: ${m.dueAmount.toStringAsFixed(2)}৳ (${m.dueMonthsCount} মাস)"
-                                  : (m.advanceAmount > 0 ? "Adv: ${m.advanceAmount.toStringAsFixed(2)}৳" : "Due: ৳0.00");
+                  ),
+                  const SizedBox(height: 8),
+                  globalMembers.isEmpty
+                      ? const Padding(
+                          padding: EdgeInsets.all(20.0),
+                          child: Text("কোনো সদস্যের তথ্য নেই।", textAlign: TextAlign.center),
+                        )
+                      : ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: globalMembers.length,
+                          itemBuilder: (context, index) {
+                            final m = globalMembers[index];
+                            final String memberDateStr = _getMemberStatementDate(m);
+                            String dueAdvStr = m.dueAmount > 0
+                                ? "Due: ${m.dueAmount.toStringAsFixed(2)}৳ (${m.dueMonthsCount} মাস)"
+                                : (m.advanceAmount > 0 ? "Adv: ${m.advanceAmount.toStringAsFixed(2)}৳" : "Due: ৳0.00");
 
-                              return Card(
+                            return RepaintBoundary(
+                              key: cardKeys[index],
+                              child: Card(
                                 color: Colors.grey.shade50,
                                 margin: const EdgeInsets.symmetric(vertical: 4),
                                 child: Padding(
@@ -2790,7 +2885,21 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text("ID: ${m.id} | নাম: ${m.name}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              "ID: ${m.id} | নাম: ${m.name}",
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                            ),
+                                          ),
+                                          Text(
+                                            "তারিখ: $memberDateStr",
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.teal),
+                                          ),
+                                        ],
+                                      ),
                                       Text("মোবাইল: ${m.mobile}"),
                                       const Divider(height: 6),
                                       Row(
@@ -2805,11 +2914,11 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                     ],
                                   ),
                                 ),
-                              );
-                            },
-                          ),
-                  ],
-                ),
+                              ),
+                            );
+                          },
+                        ),
+                ],
               ),
             ),
           ),
@@ -2819,11 +2928,11 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
             onPressed: () async {
-              await exportBoundaryToPdf(
+              await exportBlocksToPdf(
                 context,
-                allMembersBoundaryKey,
+                [headerBoundaryKey, ...cardKeys],
                 "All_Members_Report.pdf",
-                itemsPerPage: 9,
+                maxItemsPerPage: 4,
               );
             },
             icon: const Icon(Icons.download, size: 16),
@@ -3514,7 +3623,7 @@ class _MemberDashboardState extends State<MemberDashboard> {
                     context,
                     _memberDashBoundaryKey,
                     "${widget.member.name}_Statement.pdf",
-                    itemsPerPage: 9,
+                    itemsPerPage: 7,
                   );
                 },
                 icon: const Icon(Icons.download),
