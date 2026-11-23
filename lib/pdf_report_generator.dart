@@ -314,7 +314,7 @@ class PdfReportGenerator {
                   Padding(padding: const EdgeInsets.all(6), child: Text('৳${m.deposit.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontSize: 12))),
                   Padding(padding: const EdgeInsets.all(6), child: Text('৳${m.profitEarned.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, color: Colors.blue))),
                   Padding(padding: const EdgeInsets.all(6), child: Text('৳${m.totalBalance.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.bold))),
-                  Padding(padding: const EdgeInsets.all(6), child: Text(dueAdv, textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, color: m.dueAmount > 0 ? Colors.red : Colors.teal, fontWeight: FontWeight.bold))),
+                  Padding(padding: const EdgeInsets.all(6), child: Text(dueAdv, textAlign: TextAlign.right, style: TextStyle(fontSize: 12, color: m.dueAmount > 0 ? Colors.red : Colors.teal, fontWeight: FontWeight.bold))),
                 ],
               );
             }),
