@@ -1179,25 +1179,76 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     return months[month - 1];
   }
 
+ String _formatShortDate(DateTime d) {
+    return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+  }
+
   void _showMonthlyReportDialog() {
-    int selectedYear = DateTime.now().year;
-    int selectedMonth = DateTime.now().month;
+    final DateTime now = DateTime.now();
+    DateTime startDate = DateTime(now.year, now.month, 1);
+    DateTime endDate = DateTime(now.year, now.month, now.day);
     final GlobalKey monthlyBoundaryKey = GlobalKey();
+
+    Future<void> pickStartDate(StateSetter setDialogState) async {
+      final DateTime? picked = await showDatePicker(
+        context: context,
+        initialDate: startDate,
+        firstDate: DateTime(2019, 1, 1),
+        lastDate: DateTime(2100, 12, 31),
+      );
+      if (picked != null) {
+        setDialogState(() {
+          startDate = picked;
+          if (endDate.isBefore(startDate)) {
+            endDate = startDate;
+          }
+        });
+      }
+    }
+
+    Future<void> pickEndDate(StateSetter setDialogState) async {
+      final DateTime? picked = await showDatePicker(
+        context: context,
+        initialDate: endDate.isBefore(startDate) ? startDate : endDate,
+        firstDate: DateTime(2019, 1, 1),
+        lastDate: DateTime(2100, 12, 31),
+      );
+      if (picked != null) {
+        setDialogState(() {
+          endDate = picked;
+          if (endDate.isBefore(startDate)) {
+            startDate = endDate;
+          }
+        });
+      }
+    }
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) {
+          final DateTime actualStart =
+              startDate.isBefore(endDate) ? startDate : endDate;
+          final DateTime actualEnd =
+              startDate.isBefore(endDate) ? endDate : startDate;
+
+          final DateTime rangeStart = DateTime(
+              actualStart.year, actualStart.month, actualStart.day, 0, 0, 0);
+          final DateTime rangeEnd = DateTime(
+              actualEnd.year, actualEnd.month, actualEnd.day, 23, 59, 59);
+
+          bool inRange(DateTime d) {
+            return !d.isBefore(rangeStart) && !d.isAfter(rangeEnd);
+          }
+
           double monthlyDepositTotal = 0.0;
           int monthlyDepositCount = 0;
           double monthlyProfitTotal = 0.0;
-          List memberMonthEntries = [];
+          final memberMonthEntries = [];
 
           for (var member in globalMembers) {
             for (var tx in member.transactions) {
-              if (tx.status == 'approved' &&
-                  tx.date.year == selectedYear &&
-                  tx.date.month == selectedMonth) {
+              if (tx.status == 'approved' && inRange(tx.date)) {
                 if (tx.isProfit) {
                   monthlyProfitTotal += tx.amount;
                 } else {
@@ -1212,17 +1263,22 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
             }
           }
 
-          var monthBizRecords = globalBusinessRecords
-              .where((r) => r.date.year == selectedYear && r.date.month == selectedMonth)
+          final monthBizRecords = globalBusinessRecords
+              .where((r) => inRange(r.date))
               .toList();
 
-          double monthlyBizIncome = monthBizRecords.where((r) => r.isIncome).fold(0.0, (sum, r) => sum + r.amount);
-          double monthlyBizExpense = monthBizRecords.where((r) => !r.isIncome).fold(0.0, (sum, r) => sum + r.amount);
+          double monthlyBizIncome = monthBizRecords
+              .where((r) => r.isIncome)
+              .fold(0.0, (sum, r) => sum + r.amount);
+          double monthlyBizExpense = monthBizRecords
+              .where((r) => !r.isIncome)
+              .fold(0.0, (sum, r) => sum + r.amount);
 
-          String monthLabel = "${_getBengaliMonthName(selectedMonth)} $selectedYear";
+          String rangeLabel =
+              "${_formatShortDate(actualStart)} থেকে ${_formatShortDate(actualEnd)}";
 
           return AlertDialog(
-            title: const Text("🗓 মাস ভিত্তিক রিপোর্ট"),
+            title: const Text("🗓 মাস ভিত্তিক রিপোর্ট (তারিখ অনুযায়ী)"),
             content: SizedBox(
               width: double.maxFinite,
               child: SingleChildScrollView(
@@ -1230,56 +1286,43 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: DropdownButtonFormField<int>(
-                            value: selectedMonth,
-                            decoration: const InputDecoration(
-                              labelText: "মাস নির্বাচন",
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                            ),
-                            items: List.generate(12, (idx) {
-                              int mNum = idx + 1;
-                              return DropdownMenuItem<int>(
-                                value: mNum,
-                                child: Text(_getBengaliMonthName(mNum)),
-                              );
-                            }),
-                            onChanged: (val) {
-                              if (val != null) {
-                                setDialogState(() => selectedMonth = val);
-                              }
-                            },
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                "শুরুর তারিখ: ${_formatShortDate(startDate)}",
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              TextButton(
+                                onPressed: () => pickStartDate(setDialogState),
+                                child: const Text("পরিবর্তন"),
+                              ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          flex: 2,
-                          child: DropdownButtonFormField<int>(
-                            value: selectedYear,
-                            decoration: const InputDecoration(
-                              labelText: "বছর নির্বাচন",
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                            ),
-                            items: List.generate(16, (idx) {
-                              int yr = 2019 + idx;
-                              return DropdownMenuItem<int>(
-                                value: yr,
-                                child: Text("$yr"),
-                              );
-                            }),
-                            onChanged: (val) {
-                              if (val != null) {
-                                setDialogState(() => selectedYear = val);
-                              }
-                            },
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                "শেষ তারিখ: ${_formatShortDate(endDate)}",
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              TextButton(
+                                onPressed: () => pickEndDate(setDialogState),
+                                child: const Text("পরিবর্তন"),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 12),
                     RepaintBoundary(
@@ -1292,7 +1335,11 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                           children: [
                             Text(
                               globalSocietyName,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: Colors.green,
+                              ),
                             ),
                             const SizedBox(height: 6),
                             Container(
@@ -1306,22 +1353,59 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text("সারসংক্ষেপ — $monthLabel", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.teal)),
+                                  Text(
+                                    "সারসংক্ষেপ — $rangeLabel",
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: Colors.teal,
+                                    ),
+                                  ),
                                   const Divider(),
-                                  Text("• মোট কিস্তি জমা: ৳${monthlyDepositTotal.toStringAsFixed(2)} ($monthlyDepositCountটি)", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
-                                  Text("• মোট লাভ বণ্টন: ৳${monthlyProfitTotal.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
-                                  Text("• ব্যবসায়িক আয়: ৳${monthlyBizIncome.toStringAsFixed(2)}", style: const TextStyle(color: Colors.green)),
-                                  Text("• প্রজেক্ট খরচ: ৳${monthlyBizExpense.toStringAsFixed(2)}", style: const TextStyle(color: Colors.red)),
+                                  Text(
+                                    "• মোট কিস্তি জমা: ৳${monthlyDepositTotal.toStringAsFixed(2)} ($monthlyDepositCountটি)",
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.green,
+                                    ),
+                                  ),
+                                  Text(
+                                    "• মোট লাভ বণ্টন: ৳${monthlyProfitTotal.toStringAsFixed(2)}",
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.blue,
+                                    ),
+                                  ),
+                                  Text(
+                                    "• ব্যবসায়িক আয়: ৳${monthlyBizIncome.toStringAsFixed(2)}",
+                                    style: const TextStyle(color: Colors.green),
+                                  ),
+                                  Text(
+                                    "• প্রজেক্ট খরচ: ৳${monthlyBizExpense.toStringAsFixed(2)}",
+                                    style: const TextStyle(color: Colors.red),
+                                  ),
                                 ],
                               ),
                             ),
                             const SizedBox(height: 12),
-                            const Text("সদস্যদের লেনদেনসমূহ:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            const Text(
+                              "সদস্যদের লেনদেনসমূহ:",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
                             const SizedBox(height: 6),
                             memberMonthEntries.isEmpty
                                 ? const Padding(
                                     padding: EdgeInsets.symmetric(vertical: 8),
-                                    child: Text("এই মাসে কোনো সদস্যের লেনদেন নেই।", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                    child: Text(
+                                      "এই সময়কালে কোনো সদস্যের লেনদেন নেই।",
+                                      style: TextStyle(
+                                        color: Colors.grey,
+                                        fontSize: 12,
+                                      ),
+                                    ),
                                   )
                                 : ListView.builder(
                                     shrinkWrap: true,
@@ -1329,24 +1413,44 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                     itemCount: memberMonthEntries.length,
                                     itemBuilder: (context, idx) {
                                       Member m = memberMonthEntries[idx]['member'];
-                                      TransactionHistory t = memberMonthEntries[idx]['tx'];
+                                      TransactionHistory t =
+                                          memberMonthEntries[idx]['tx'];
                                       return Card(
                                         margin: const EdgeInsets.symmetric(vertical: 3),
                                         child: ListTile(
                                           dense: true,
-                                          title: Text("${m.name} (ID: ${m.id}) — ৳${t.amount.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold)),
-                                          subtitle: Text("${t.date.day}/${t.date.month}/${t.date.year} | ${t.isProfit ? 'লাভ বণ্টন' : t.paymentMethod}"),
+                                          title: Text(
+                                            "${m.name} (ID: ${m.id}) — ৳${t.amount.toStringAsFixed(2)}",
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          subtitle: Text(
+                                            "${t.date.day}/${t.date.month}/${t.date.year} | ${t.isProfit ? 'লাভ বণ্টন' : t.paymentMethod}",
+                                          ),
                                         ),
                                       );
                                     },
                                   ),
                             const SizedBox(height: 10),
-                            const Text("ব্যবসার আয়-ব্যয় পোস্টিং:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            const Text(
+                              "ব্যবসার আয়-ব্যয় পোস্টিং:",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
                             const SizedBox(height: 6),
                             monthBizRecords.isEmpty
                                 ? const Padding(
                                     padding: EdgeInsets.symmetric(vertical: 8),
-                                    child: Text("এই মাসে কোনো ব্যবসায়িক পোস্টিং নেই।", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                    child: Text(
+                                      "এই সময়কালে কোনো ব্যবসায়িক পোস্টিং নেই।",
+                                      style: TextStyle(
+                                        color: Colors.grey,
+                                        fontSize: 12,
+                                      ),
+                                    ),
                                   )
                                 : ListView.builder(
                                     shrinkWrap: true,
@@ -1358,8 +1462,18 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                         margin: const EdgeInsets.symmetric(vertical: 3),
                                         child: ListTile(
                                           dense: true,
-                                          title: Text("${r.title} (${r.isIncome ? '+' : '-'}৳${r.amount.toStringAsFixed(2)})", style: TextStyle(fontWeight: FontWeight.bold, color: r.isIncome ? Colors.green : Colors.red)),
-                                          subtitle: Text("তারিখ: ${r.date.day}/${r.date.month}/${r.date.year}"),
+                                          title: Text(
+                                            "${r.title} (${r.isIncome ? '+' : '-'}৳${r.amount.toStringAsFixed(2)})",
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: r.isIncome
+                                                  ? Colors.green
+                                                  : Colors.red,
+                                            ),
+                                          ),
+                                          subtitle: Text(
+                                            "তারিখ: ${r.date.day}/${r.date.month}/${r.date.year}",
+                                          ),
                                         ),
                                       );
                                     },
@@ -1373,27 +1487,28 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বন্ধ করুন")),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text("বন্ধ করুন"),
+              ),
               ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                ),
+                icon: const Icon(Icons.picture_as_pdf),
+                label: const Text("PDF ডাউনলোড"),
                 onPressed: () async {
-                  await PdfReportGenerator.generateMonthlyReport(
+                  Navigator.pop(ctx);
+                  await PdfReportGenerator.generateCustomDateRangeSummaryReport(
                     context: context,
                     societyName: globalSocietyName,
-                    monthLabel: monthLabel,
-                    selectedMonth: selectedMonth,
-                    selectedYear: selectedYear,
-                    monthlyDepositTotal: monthlyDepositTotal,
-                    monthlyDepositCount: monthlyDepositCount,
-                    monthlyProfitTotal: monthlyProfitTotal,
-                    monthlyBizIncome: monthlyBizIncome,
-                    monthlyBizExpense: monthlyBizExpense,
-                    memberMonthEntries: memberMonthEntries,
-                    monthBizRecords: monthBizRecords,
+                    startDate: actualStart,
+                    endDate: actualEnd,
+                    members: globalMembers,
+                    businessRecords: globalBusinessRecords,
                   );
                 },
-                icon: const Icon(Icons.download, size: 16),
-                label: const Text("PDF ডাউনলোড"),
               ),
             ],
           );
@@ -1401,7 +1516,6 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       ),
     );
   }
-
   void _showPendingApprovalsDialog() {
     showDialog(
       context: context,
