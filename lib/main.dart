@@ -446,6 +446,109 @@ class SamobayFinance {
   }
 }
 
+Future<void> showPeriodOrYearlyReportDialog({
+  required BuildContext context,
+  required String societyName,
+  required List<Member> members,
+  required List<BusinessRecord> businessRecords,
+}) async {
+  int selectedYear = DateTime.now().year;
+  bool isFullYear = true;
+  int selectedMonth = DateTime.now().month;
+
+  await showDialog(
+    context: context,
+    builder: (ctx) {
+      return StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('বার্ষিক ও মাসিক সার্বিক রিপোর্ট'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('রিপোর্টের ধরন বেছে নিন:'),
+                const SizedBox(height: 8),
+                DropdownButton<bool>(
+                  isExpanded: true,
+                  value: isFullYear,
+                  items: const [
+                    DropdownMenuItem(
+                      value: true,
+                      child: Text('পুরো বছর (০১ জানুয়ারি - ৩১ ডিসেম্বর)'),
+                    ),
+                    DropdownMenuItem(
+                      value: false,
+                      child: Text('নির্দিষ্ট বছরের একটি মাস'),
+                    ),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) {
+                      setDialogState(() => isFullYear = val);
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                const Text('বছর নির্বাচন করুন:'),
+                DropdownButton<int>(
+                  isExpanded: true,
+                  value: selectedYear,
+                  items: List.generate(10, (i) {
+                    final yr = DateTime.now().year - i;
+                    return DropdownMenuItem(value: yr, child: Text('$yr সাল'));
+                  }),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setDialogState(() => selectedYear = val);
+                    }
+                  },
+                ),
+                if (!isFullYear) ...[
+                  const SizedBox(height: 12),
+                  const Text('মাস নির্বাচন করুন:'),
+                  DropdownButton<int>(
+                    isExpanded: true,
+                    value: selectedMonth,
+                    items: List.generate(12, (i) {
+                      final m = i + 1;
+                      return DropdownMenuItem(value: m, child: Text('$m নম্বর মাস'));
+                    }),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setDialogState(() => selectedMonth = val);
+                      }
+                    },
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('বাতিল'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  await PdfReportGenerator.generatePeriodOrYearlySummaryReport(
+                    context: context,
+                    societyName: societyName,
+                    year: selectedYear,
+                    month: isFullYear ? null : selectedMonth,
+                    members: members,
+                    businessRecords: businessRecords,
+                  );
+                },
+                child: const Text('PDF ডাউনলোড'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
+
 Future<void> exportBoundaryToPdf(
   BuildContext context,
   GlobalKey boundaryKey,
@@ -3033,6 +3136,27 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       onPressed: _showMonthlyReportDialog,
                       icon: const Icon(Icons.calendar_month, size: 16),
                       label: const Text("মাসিক রিপোর্ট (যেকোনো মাস ও PDF)", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.green.shade800,
+                        side: BorderSide(color: Colors.green.shade800),
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                      ),
+                      onPressed: () {
+                        showPeriodOrYearlyReportDialog(
+                          context: context,
+                          societyName: globalSocietyName,
+                          members: globalMembers,
+                          businessRecords: globalBusinessRecords,
+                        );
+                      },
+                      icon: const Icon(Icons.picture_as_pdf, size: 16),
+                      label: const Text("বার্ষিক ও মাসিক সার্বিক রিপোর্ট", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                     ),
                   ),
                   const SizedBox(height: 6),
