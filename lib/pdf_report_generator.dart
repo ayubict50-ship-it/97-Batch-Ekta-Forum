@@ -643,8 +643,7 @@ class PdfReportGenerator {
 
     final Map<String, double> memberDepositMap = {};
     final Map<String, double> memberProfitMap = {};
-    final List> profitEntries = [];
-
+    final profitEntries = [];
     for (final m in members) {
       memberDepositMap[m.id] = 0.0;
       memberProfitMap[m.id] = 0.0;
