@@ -631,17 +631,26 @@ class PdfReportGenerator {
     required List<Member> members,
     required List<BusinessRecord> businessRecords,
   }) async {
+    final scaffoldMessenger = ScaffoldMessenger.maybeOf(context);
+
     try {
-      final DateTime actualStart = startDate.isBefore(endDate) ? startDate : endDate;
-      final DateTime actualEnd = startDate.isBefore(endDate) ? endDate : startDate;
+      scaffoldMessenger?.showSnackBar(
+        const SnackBar(
+          content: Text('PDF রিপোর্ট তৈরি হচ্ছে, অনুগ্রহ করে অপেক্ষা করুন...'),
+          duration: Duration(seconds: 2),
+        ),
+      );
 
-      final DateTime rangeStart =
-          DateTime(actualStart.year, actualStart.month, actualStart.day, 0, 0, 0);
-      final DateTime rangeEnd =
-          DateTime(actualEnd.year, actualEnd.month, actualEnd.day, 23, 59, 59);
+      final DateTime actualStart =
+          startDate.isBefore(endDate) ? startDate : endDate;
+      final DateTime actualEnd =
+          startDate.isBefore(endDate) ? endDate : startDate;
 
-      final String periodTitle =
-          'নির্দিষ্ট সময়ের সার্বিক আর্থিক প্রতিবেদন (সঞ্চয়, লাভ, খরচ ও বণ্টন)';
+      final DateTime rangeStart = DateTime(
+          actualStart.year, actualStart.month, actualStart.day, 0, 0, 0);
+      final DateTime rangeEnd = DateTime(
+          actualEnd.year, actualEnd.month, actualEnd.day, 23, 59, 59);
+
       final String fileName =
           'Summary_${_fileSafeDate(rangeStart)}_to_${_fileSafeDate(rangeEnd)}.pdf';
 
@@ -655,7 +664,7 @@ class PdfReportGenerator {
 
       final Map<String, double> memberDepositMap = {};
       final Map<String, double> memberProfitMap = {};
-      final profitEntries = [];
+      final List> profitEntries = [];
 
       for (final m in members) {
         memberDepositMap[m.id] = 0.0;
@@ -665,12 +674,14 @@ class PdfReportGenerator {
           if (tx.status == 'approved' && inRange(tx.date)) {
             if (tx.isProfit) {
               distributedProfit += tx.amount;
-              memberProfitMap[m.id] = (memberProfitMap[m.id] ?? 0.0) + tx.amount;
+              memberProfitMap[m.id] =
+                  (memberProfitMap[m.id] ?? 0.0) + tx.amount;
               profitEntries.add({'member': m, 'tx': tx});
             } else {
               depositTotal += tx.amount;
               depositCount++;
-              memberDepositMap[m.id] = (memberDepositMap[m.id] ?? 0.0) + tx.amount;
+              memberDepositMap[m.id] =
+                  (memberDepositMap[m.id] ?? 0.0) + tx.amount;
             }
           }
         }
@@ -698,205 +709,236 @@ class PdfReportGenerator {
       }
 
       final double netBizAfterExpense = bizIncome - bizExpense;
-      final double remainingUnsettledProfit = netBizAfterExpense - distributedProfit;
-      final double totalInflowAfterExpense = depositTotal + bizIncome - bizExpense;
+      final double remainingUnsettledProfit =
+          netBizAfterExpense - distributedProfit;
+      final double totalInflowAfterExpense =
+          depositTotal + bizIncome - bizExpense;
 
-      final widget = Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _headerBlock(
-            societyName,
-            periodTitle,
-            'শুরুর তারিখ: ${_formatDate(rangeStart)}  |  শেষ তারিখ: ${_formatDate(rangeEnd)}',
-          ),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            margin: const EdgeInsets.only(bottom: 14),
-            decoration: BoxDecoration(
-              color: Colors.green.shade50,
-              border: Border.all(color: Colors.green.shade300),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '১. সদস্যদের মোট সঞ্চয় (কিস্তি জমা): ৳${depositTotal.toStringAsFixed(2)} ($depositCountটি)',
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.green),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '২. ব্যবসায়িক মোট লাভ (+): ৳${bizIncome.toStringAsFixed(2)}',
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.teal),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '৩. মোট খরচ (-): ৳${bizExpense.toStringAsFixed(2)}',
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.red),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '৪. খরচ বাদে ব্যবসায়িক লাভ: ৳${netBizAfterExpense.toStringAsFixed(2)} | সদস্যদের অ্যাকাউন্টে বণ্টনকৃত লাভ: ৳${distributedProfit.toStringAsFixed(2)}',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '৫. বণ্টন পরবর্তী অবশিষ্ট লাভ: ৳${remainingUnsettledProfit.toStringAsFixed(2)} | নিট তহবিল বৃদ্ধি (সঞ্চয় + লাভ - খরচ): ৳${totalInflowAfterExpense.toStringAsFixed(2)}',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87),
-                ),
-              ],
+      final pw.Document pdf = pw.Document();
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(20),
+          footer: (pw.Context ctx) => pw.Align(
+            alignment: pw.Alignment.centerRight,
+            child: pw.Text(
+              'Page ${ctx.pageNumber} of ${ctx.pagesCount} | Generated: ${_formatDate(DateTime.now())}',
+              style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
             ),
           ),
-          const Text('ক. সদস্যভিত্তিক সঞ্চয় ও বণ্টনকৃত লাভ:', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 6),
-          Table(
-            border: TableBorder.all(color: Colors.grey.shade400, width: 0.8),
-            columnWidths: const {
-              0: FixedColumnWidth(46),
-              1: FlexColumnWidth(2.4),
-              2: FlexColumnWidth(1.5),
-              3: FlexColumnWidth(1.5),
-              4: FlexColumnWidth(1.6),
-            },
-            children: [
-              TableRow(
-                decoration: BoxDecoration(color: Colors.green.shade800),
-                children: const [
-                  Padding(padding: EdgeInsets.all(6), child: Text('ID', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
-                  Padding(padding: EdgeInsets.all(6), child: Text('সদস্যের নাম', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
-                  Padding(padding: EdgeInsets.all(6), child: Text('সময়ের সঞ্চয়', textAlign: TextAlign.right, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
-                  Padding(padding: EdgeInsets.all(6), child: Text('প্রাপ্ত লাভ', textAlign: TextAlign.right, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
-                  Padding(padding: EdgeInsets.all(6), child: Text('মোট যুক্ত', textAlign: TextAlign.right, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
-                ],
+          build: (pw.Context ctx) => [
+            pw.Container(
+              padding: const pw.EdgeInsets.only(bottom: 8),
+              margin: const pw.EdgeInsets.only(bottom: 12),
+              decoration: const pw.BoxDecoration(
+                border: pw.Border(
+                  bottom: pw.BorderSide(color: PdfColors.green800, width: 2),
+                ),
               ),
-              ...members.asMap().entries.map((entry) {
-                final idx = entry.key;
-                final m = entry.value;
-                final double dep = memberDepositMap[m.id] ?? 0.0;
-                final double prof = memberProfitMap[m.id] ?? 0.0;
-                return TableRow(
-                  decoration: BoxDecoration(color: idx % 2 == 1 ? Colors.grey.shade100 : Colors.white),
-                  children: [
-                    Padding(padding: const EdgeInsets.all(6), child: Text(m.id, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12))),
-                    Padding(padding: const EdgeInsets.all(6), child: Text(m.name, style: const TextStyle(fontSize: 12))),
-                    Padding(padding: const EdgeInsets.all(6), child: Text('৳${dep.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, color: Colors.green))),
-                    Padding(padding: const EdgeInsets.all(6), child: Text('৳${prof.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, color: Colors.blue))),
-                    Padding(padding: const EdgeInsets.all(6), child: Text('৳${(dep + prof).toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
-                  ],
-                );
-              }),
-              TableRow(
-                decoration: BoxDecoration(color: Colors.green.shade50),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  const Padding(padding: EdgeInsets.all(6), child: Text('')),
-                  const Padding(padding: EdgeInsets.all(6), child: Text('মোট', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                  Padding(padding: const EdgeInsets.all(6), child: Text('৳${depositTotal.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.green))),
-                  Padding(padding: const EdgeInsets.all(6), child: Text('৳${distributedProfit.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blue))),
-                  Padding(padding: const EdgeInsets.all(6), child: Text('৳${(depositTotal + distributedProfit).toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  pw.Text(
+                    societyName,
+                    style: pw.TextStyle(
+                      fontSize: 16,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.green800,
+                    ),
+                  ),
+                  pw.SizedBox(height: 3),
+                  pw.Text(
+                    'Period Summary Report (${_formatDate(rangeStart)} - ${_formatDate(rangeEnd)})',
+                    style: pw.TextStyle(
+                      fontSize: 11,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
                 ],
               ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          const Text('খ. ব্যবসায়িক লাভ ও খরচের পোস্টিংসমূহ:', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 6),
-          if (filteredBizRecords.isEmpty)
-            const Text('এই সময়কালে কোনো ব্যবসায়িক লাভ বা খরচের পোস্টিং নেই।', style: TextStyle(fontSize: 12, color: Colors.grey))
-          else
-            Table(
-              border: TableBorder.all(color: Colors.grey.shade400, width: 0.8),
-              columnWidths: const {
-                0: FixedColumnWidth(42),
-                1: FixedColumnWidth(90),
-                2: FlexColumnWidth(2.6),
-                3: FlexColumnWidth(1.1),
-                4: FlexColumnWidth(1.4),
-              },
-              children: [
-                TableRow(
-                  decoration: BoxDecoration(color: Colors.teal.shade800),
-                  children: const [
-                    Padding(padding: EdgeInsets.all(6), child: Text('ক্রম', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
-                    Padding(padding: EdgeInsets.all(6), child: Text('তারিখ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
-                    Padding(padding: EdgeInsets.all(6), child: Text('বিবরণ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
-                    Padding(padding: EdgeInsets.all(6), child: Text('ধরন', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
-                    Padding(padding: EdgeInsets.all(6), child: Text('টাকার পরিমাণ', textAlign: TextAlign.right, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
-                  ],
-                ),
-                ...filteredBizRecords.asMap().entries.map((entry) {
-                  final idx = entry.key;
-                  final r = entry.value;
-                  return TableRow(
-                    decoration: BoxDecoration(color: idx % 2 == 1 ? Colors.grey.shade100 : Colors.white),
-                    children: [
-                      Padding(padding: const EdgeInsets.all(6), child: Text('${idx + 1}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12))),
-                      Padding(padding: const EdgeInsets.all(6), child: Text(_formatDate(r.date), style: const TextStyle(fontSize: 12))),
-                      Padding(padding: const EdgeInsets.all(6), child: Text(r.title, style: const TextStyle(fontSize: 12))),
-                      Padding(padding: const EdgeInsets.all(6), child: Text(r.isIncome ? 'লাভ (+)' : 'খরচ (-)', style: TextStyle(fontSize: 12, color: r.isIncome ? Colors.green : Colors.red, fontWeight: FontWeight.bold))),
-                      Padding(padding: const EdgeInsets.all(6), child: Text('${r.isIncome ? '+' : '-'}৳${r.amount.toStringAsFixed(2)}', textAlign: TextAlign.right, style: TextStyle(fontSize: 12, color: r.isIncome ? Colors.green : Colors.red, fontWeight: FontWeight.bold))),
-                    ],
-                  );
-                }),
-              ],
             ),
-          const SizedBox(height: 14),
-          const Text('গ. সদস্যদের অ্যাকাউন্টে বণ্টনকৃত লাভের বিবরণ:', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 6),
-          if (profitEntries.isEmpty)
-            const Text('এই সময়কালে কোনো লাভ বণ্টনের এন্ট্রি পাওয়া যায়নি।', style: TextStyle(fontSize: 12, color: Colors.grey))
-          else
-            Table(
-              border: TableBorder.all(color: Colors.grey.shade400, width: 0.8),
-              columnWidths: const {
-                0: FixedColumnWidth(42),
-                1: FixedColumnWidth(90),
-                2: FlexColumnWidth(2.2),
-                3: FlexColumnWidth(1.8),
-                4: FlexColumnWidth(1.3),
-              },
-              children: [
-                TableRow(
-                  decoration: BoxDecoration(color: Colors.blue.shade800),
-                  children: const [
-                    Padding(padding: EdgeInsets.all(6), child: Text('ক্রম', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
-                    Padding(padding: EdgeInsets.all(6), child: Text('তারিখ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
-                    Padding(padding: EdgeInsets.all(6), child: Text('সদস্য (ID)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
-                    Padding(padding: EdgeInsets.all(6), child: Text('বিবরণ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
-                    Padding(padding: EdgeInsets.all(6), child: Text('বণ্টনকৃত লাভ', textAlign: TextAlign.right, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
-                  ],
-                ),
-                ...profitEntries.asMap().entries.map((entry) {
-                  final idx = entry.key;
-                  final Member m = entry.value['member'] as Member;
-                  final TransactionHistory tx = entry.value['tx'] as TransactionHistory;
-                  return TableRow(
-                    decoration: BoxDecoration(color: idx % 2 == 1 ? Colors.grey.shade100 : Colors.white),
-                    children: [
-                      Padding(padding: const EdgeInsets.all(6), child: Text('${idx + 1}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12))),
-                      Padding(padding: const EdgeInsets.all(6), child: Text(_formatDate(tx.date), style: const TextStyle(fontSize: 12))),
-                      Padding(padding: const EdgeInsets.all(6), child: Text('${m.name} (${m.id})', style: const TextStyle(fontSize: 12))),
-                      Padding(padding: const EdgeInsets.all(6), child: Text(tx.paymentMethod.isNotEmpty ? tx.paymentMethod : 'লাভ বণ্টন', style: const TextStyle(fontSize: 12))),
-                      Padding(padding: const EdgeInsets.all(6), child: Text('৳${tx.amount.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, color: Colors.blue, fontWeight: FontWeight.bold))),
-                    ],
-                  );
-                }),
-              ],
+            pw.Container(
+              width: double.infinity,
+              padding: const pw.EdgeInsets.all(10),
+              margin: const pw.EdgeInsets.only(bottom: 12),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.green50,
+                border: pw.Border.all(color: PdfColors.green200),
+                borderRadius: pw.BorderRadius.circular(4),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    '1. Total Member Savings / Deposits: BDT ${depositTotal.toStringAsFixed(2)} ($depositCount tx)',
+                    style: pw.TextStyle(
+                        fontSize: 10, fontWeight: pw.FontWeight.bold),
+                  ),
+                  pw.SizedBox(height: 2),
+                  pw.Text(
+                    '2. Business Income (+): BDT ${bizIncome.toStringAsFixed(2)}',
+                    style: pw.TextStyle(
+                        fontSize: 10, fontWeight: pw.FontWeight.bold),
+                  ),
+                  pw.SizedBox(height: 2),
+                  pw.Text(
+                    '3. Business Expense (-): BDT ${bizExpense.toStringAsFixed(2)}',
+                    style: pw.TextStyle(
+                        fontSize: 10, fontWeight: pw.FontWeight.bold),
+                  ),
+                  pw.SizedBox(height: 2),
+                  pw.Text(
+                    '4. Net Business Profit (After Expense): BDT ${netBizAfterExpense.toStringAsFixed(2)} | Distributed Profit: BDT ${distributedProfit.toStringAsFixed(2)}',
+                    style: const pw.TextStyle(fontSize: 9.5),
+                  ),
+                  pw.SizedBox(height: 2),
+                  pw.Text(
+                    '5. Unsettled Profit: BDT ${remainingUnsettledProfit.toStringAsFixed(2)} | Net Fund Inflow: BDT ${totalInflowAfterExpense.toStringAsFixed(2)}',
+                    style: const pw.TextStyle(fontSize: 9.5),
+                  ),
+                ],
+              ),
             ),
-        ],
+            pw.Text(
+              'A. Member-wise Savings & Distributed Profit',
+              style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 6),
+            pw.TableHelper.fromTextArray(
+              headers: const [
+                'ID',
+                'Member Name',
+                'Period Deposit',
+                'Profit Earned',
+                'Total Added',
+              ],
+              data: [
+                ...members.map((m) {
+                  final double dep = memberDepositMap[m.id] ?? 0.0;
+                  final double prof = memberProfitMap[m.id] ?? 0.0;
+                  return [
+                    m.id,
+                    m.name,
+                    dep.toStringAsFixed(2),
+                    prof.toStringAsFixed(2),
+                    (dep + prof).toStringAsFixed(2),
+                  ];
+                }),
+                [
+                  '',
+                  'TOTAL',
+                  depositTotal.toStringAsFixed(2),
+                  distributedProfit.toStringAsFixed(2),
+                  (depositTotal + distributedProfit).toStringAsFixed(2),
+                ],
+              ],
+              headerStyle: pw.TextStyle(
+                color: PdfColors.white,
+                fontWeight: pw.FontWeight.bold,
+                fontSize: 9.5,
+              ),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.green800),
+              cellStyle: const pw.TextStyle(fontSize: 9),
+              cellAlignments: {
+                0: pw.Alignment.center,
+                1: pw.Alignment.centerLeft,
+                2: pw.Alignment.centerRight,
+                3: pw.Alignment.centerRight,
+                4: pw.Alignment.centerRight,
+              },
+            ),
+            pw.SizedBox(height: 14),
+            pw.Text(
+              'B. Business Income & Expense Records',
+              style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 6),
+            if (filteredBizRecords.isEmpty)
+              pw.Text(
+                'No business records in this period.',
+                style: const pw.TextStyle(fontSize: 9.5, color: PdfColors.grey700),
+              )
+            else
+              pw.TableHelper.fromTextArray(
+                headers: const ['Date', 'Title', 'Type', 'Amount (BDT)'],
+                data: filteredBizRecords
+                    .map((r) => [
+                          _formatDate(r.date),
+                          r.title,
+                          r.isIncome ? 'Income (+)' : 'Expense (-)',
+                          '${r.isIncome ? '+' : '-'}${r.amount.toStringAsFixed(2)}',
+                        ])
+                    .toList(),
+                headerStyle: pw.TextStyle(
+                  color: PdfColors.white,
+                  fontWeight: pw.FontWeight.bold,
+                  fontSize: 9.5,
+                ),
+                headerDecoration:
+                    const pw.BoxDecoration(color: PdfColors.teal800),
+                cellStyle: const pw.TextStyle(fontSize: 9),
+                cellAlignments: {
+                  0: pw.Alignment.centerLeft,
+                  1: pw.Alignment.centerLeft,
+                  2: pw.Alignment.center,
+                  3: pw.Alignment.centerRight,
+                },
+              ),
+            pw.SizedBox(height: 14),
+            pw.Text(
+              'C. Profit Distribution Entries',
+              style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 6),
+            if (profitEntries.isEmpty)
+              pw.Text(
+                'No profit distribution entries in this period.',
+                style: const pw.TextStyle(fontSize: 9.5, color: PdfColors.grey700),
+              )
+            else
+              pw.TableHelper.fromTextArray(
+                headers: const ['Date', 'Member (ID)', 'Details', 'Profit (BDT)'],
+                data: profitEntries.map((entry) {
+                  final Member m = entry['member'] as Member;
+                  final TransactionHistory tx = entry['tx'] as TransactionHistory;
+                  return [
+                    _formatDate(tx.date),
+                    '${m.name} (${m.id})',
+                    tx.paymentMethod.isNotEmpty
+                        ? tx.paymentMethod
+                        : 'Profit Distribution',
+                    tx.amount.toStringAsFixed(2),
+                  ];
+                }).toList(),
+                headerStyle: pw.TextStyle(
+                  color: PdfColors.white,
+                  fontWeight: pw.FontWeight.bold,
+                  fontSize: 9.5,
+                ),
+                headerDecoration:
+                    const pw.BoxDecoration(color: PdfColors.blue800),
+                cellStyle: const pw.TextStyle(fontSize: 9),
+                cellAlignments: {
+                  0: pw.Alignment.centerLeft,
+                  1: pw.Alignment.centerLeft,
+                  2: pw.Alignment.centerLeft,
+                  3: pw.Alignment.centerRight,
+                },
+              ),
+          ],
+        ),
       );
 
+      final Uint8List pdfBytes = await pdf.save();
       if (context.mounted) {
-        await _renderWidgetToMultiPagePdf(context, widget, fileName);
+        await _savePdfBytes(context, pdfBytes, fileName);
       }
     } catch (e) {
       debugPrint('Custom Date Range Report Error: $e');
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('রিপোর্ট তৈরি করতে সমস্যা হয়েছে: $e')),
-        );
-      }
+      scaffoldMessenger?.showSnackBar(
+        SnackBar(content: Text('রিপোর্ট তৈরি করতে সমস্যা হয়েছে: $e')),
+      );
     }
   }
 }
