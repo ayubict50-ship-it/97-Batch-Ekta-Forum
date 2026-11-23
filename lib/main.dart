@@ -452,89 +452,88 @@ Future<void> showPeriodOrYearlyReportDialog({
   required List<Member> members,
   required List<BusinessRecord> businessRecords,
 }) async {
-  int selectedYear = DateTime.now().year;
-  bool isFullYear = true;
-  int selectedMonth = DateTime.now().month;
+  final BuildContext parentContext = context;
+  DateTime startDate = DateTime(DateTime.now().year, 1, 1);
+  DateTime endDate = DateTime.now();
+
+  String fmt(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
 
   await showDialog(
-    context: context,
-    builder: (ctx) {
+    context: parentContext,
+    builder: (dialogCtx) {
       return StatefulBuilder(
-        builder: (context, setDialogState) {
+        builder: (ctx, setDialogState) {
           return AlertDialog(
-            title: const Text('বার্ষিক ও মাসিক সার্বিক রিপোর্ট'),
+            title: const Text('তারিখ অনুযায়ী সার্বিক রিপোর্ট'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('রিপোর্টের ধরন বেছে নিন:'),
-                const SizedBox(height: 8),
-                DropdownButton<bool>(
-                  isExpanded: true,
-                  value: isFullYear,
-                  items: const [
-                    DropdownMenuItem(
-                      value: true,
-                      child: Text('পুরো বছর (০১ জানুয়ারি - ৩১ ডিসেম্বর)'),
-                    ),
-                    DropdownMenuItem(
-                      value: false,
-                      child: Text('নির্দিষ্ট বছরের একটি মাস'),
-                    ),
-                  ],
-                  onChanged: (val) {
-                    if (val != null) {
-                      setDialogState(() => isFullYear = val);
-                    }
-                  },
+                const Text(
+                  'শুরুর তারিখ ও শেষ তারিখ নির্বাচন করুন:',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
                 ),
                 const SizedBox(height: 12),
-                const Text('বছর নির্বাচন করুন:'),
-                DropdownButton<int>(
-                  isExpanded: true,
-                  value: selectedYear,
-                  items: List.generate(10, (i) {
-                    final yr = DateTime.now().year - i;
-                    return DropdownMenuItem(value: yr, child: Text('$yr সাল'));
-                  }),
-                  onChanged: (val) {
-                    if (val != null) {
-                      setDialogState(() => selectedYear = val);
-                    }
-                  },
+                Row(
+                  children: [
+                    Expanded(child: Text('শুরুর তারিখ: ${fmt(startDate)}')),
+                    TextButton(
+                      onPressed: () async {
+                        final picked = await showDatePicker(
+                          context: ctx,
+                          initialDate: startDate,
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime(2040),
+                        );
+                        if (picked != null) {
+                          setDialogState(() => startDate = picked);
+                        }
+                      },
+                      child: const Text('পরিবর্তন'),
+                    ),
+                  ],
                 ),
-                if (!isFullYear) ...[
-                  const SizedBox(height: 12),
-                  const Text('মাস নির্বাচন করুন:'),
-                  DropdownButton<int>(
-                    isExpanded: true,
-                    value: selectedMonth,
-                    items: List.generate(12, (i) {
-                      final m = i + 1;
-                      return DropdownMenuItem(value: m, child: Text('$m নম্বর মাস'));
-                    }),
-                    onChanged: (val) {
-                      if (val != null) {
-                        setDialogState(() => selectedMonth = val);
-                      }
-                    },
-                  ),
-                ],
+                Row(
+                  children: [
+                    Expanded(child: Text('শেষ তারিখ: ${fmt(endDate)}')),
+                    TextButton(
+                      onPressed: () async {
+                        final picked = await showDatePicker(
+                          context: ctx,
+                          initialDate: endDate,
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime(2040),
+                        );
+                        if (picked != null) {
+                          setDialogState(() => endDate = picked);
+                        }
+                      },
+                      child: const Text('পরিবর্তন'),
+                    ),
+                  ],
+                ),
               ],
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(ctx),
+                onPressed: () => Navigator.of(dialogCtx).pop(),
                 child: const Text('বাতিল'),
               ),
               ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                ),
                 onPressed: () async {
-                  Navigator.pop(ctx);
-                  await PdfReportGenerator.generatePeriodOrYearlySummaryReport(
-                    context: context,
+                  Navigator.of(dialogCtx).pop();
+                  await Future.delayed(const Duration(milliseconds: 50));
+                  if (!parentContext.mounted) return;
+                  await PdfReportGenerator.generateCustomDateRangeSummaryReport(
+                    context: parentContext,
                     societyName: societyName,
-                    year: selectedYear,
-                    month: isFullYear ? null : selectedMonth,
+                    startDate: startDate,
+                    endDate: endDate,
                     members: members,
                     businessRecords: businessRecords,
                   );
@@ -548,7 +547,6 @@ Future<void> showPeriodOrYearlyReportDialog({
     },
   );
 }
-
 Future<void> exportBoundaryToPdf(
   BuildContext context,
   GlobalKey boundaryKey,
