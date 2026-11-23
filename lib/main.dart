@@ -530,11 +530,17 @@ Future<void> showPeriodOrYearlyReportDialog({
               ElevatedButton(
                 onPressed: () async {
                   Navigator.pop(ctx);
-                  await PdfReportGenerator.generatePeriodOrYearlySummaryReport(
+                  final DateTime startRange = isFullYear
+                      ? DateTime(selectedYear, 1, 1)
+                      : DateTime(selectedYear, selectedMonth, 1);
+                  final DateTime endRange = isFullYear
+                      ? DateTime(selectedYear, 12, 31)
+                      : DateTime(selectedYear, selectedMonth + 1, 0);
+                  await PdfReportGenerator.generateCustomDateRangeSummaryReport(
                     context: context,
                     societyName: societyName,
-                    year: selectedYear,
-                    month: isFullYear ? null : selectedMonth,
+                    startDate: startRange,
+                    endDate: endRange,
                     members: members,
                     businessRecords: businessRecords,
                   );
