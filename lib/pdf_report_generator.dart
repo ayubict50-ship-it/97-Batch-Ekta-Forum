@@ -314,7 +314,7 @@ class PdfReportGenerator {
                   Padding(padding: const EdgeInsets.all(6), child: Text('৳${m.deposit.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontSize: 12))),
                   Padding(padding: const EdgeInsets.all(6), child: Text('৳${m.profitEarned.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, color: Colors.blue))),
                   Padding(padding: const EdgeInsets.all(6), child: Text('৳${m.totalBalance.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.bold))),
-                  Padding(padding: const EdgeInsets.all(6), child: Text(dueAdv, textAlign: TextAlign.right, style: TextStyle(fontSize: 12, color: m.dueAmount > 0 ? Colors.red : Colors.teal, fontWeight: FontWeight.bold))),
+                  Padding(padding: const EdgeInsets.all(6), child: Text(dueAdv, textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, color: m.dueAmount > 0 ? Colors.red : Colors.teal, fontWeight: FontWeight.bold))),
                 ],
               );
             }),
@@ -656,6 +656,7 @@ class PdfReportGenerator {
       final Map<String, double> memberDepositMap = {};
       final Map<String, double> memberProfitMap = {};
       final List> profitEntries = [];
+
       for (final m in members) {
         memberDepositMap[m.id] = 0.0;
         memberProfitMap[m.id] = 0.0;
@@ -665,7 +666,7 @@ class PdfReportGenerator {
             if (tx.isProfit) {
               distributedProfit += tx.amount;
               memberProfitMap[m.id] = (memberProfitMap[m.id] ?? 0.0) + tx.amount;
-              profitEntries.add(<String, dynamic>{'member': m, 'tx': tx});
+              profitEntries.add({'member': m, 'tx': tx});
             } else {
               depositTotal += tx.amount;
               depositCount++;
