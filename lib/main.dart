@@ -452,88 +452,89 @@ Future<void> showPeriodOrYearlyReportDialog({
   required List<Member> members,
   required List<BusinessRecord> businessRecords,
 }) async {
-  final BuildContext parentContext = context;
-  DateTime startDate = DateTime(DateTime.now().year, 1, 1);
-  DateTime endDate = DateTime.now();
-
-  String fmt(DateTime d) =>
-      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+  int selectedYear = DateTime.now().year;
+  bool isFullYear = true;
+  int selectedMonth = DateTime.now().month;
 
   await showDialog(
-    context: parentContext,
-    builder: (dialogCtx) {
+    context: context,
+    builder: (ctx) {
       return StatefulBuilder(
-        builder: (ctx, setDialogState) {
+        builder: (context, setDialogState) {
           return AlertDialog(
-            title: const Text('তারিখ অনুযায়ী সার্বিক রিপোর্ট'),
+            title: const Text('বার্ষিক ও মাসিক সার্বিক রিপোর্ট'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'শুরুর তারিখ ও শেষ তারিখ নির্বাচন করুন:',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                const Text('রিপোর্টের ধরন বেছে নিন:'),
+                const SizedBox(height: 8),
+                DropdownButton<bool>(
+                  isExpanded: true,
+                  value: isFullYear,
+                  items: const [
+                    DropdownMenuItem(
+                      value: true,
+                      child: Text('পুরো বছর (০১ জানুয়ারি - ৩১ ডিসেম্বর)'),
+                    ),
+                    DropdownMenuItem(
+                      value: false,
+                      child: Text('নির্দিষ্ট বছরের একটি মাস'),
+                    ),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) {
+                      setDialogState(() => isFullYear = val);
+                    }
+                  },
                 ),
                 const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(child: Text('শুরুর তারিখ: ${fmt(startDate)}')),
-                    TextButton(
-                      onPressed: () async {
-                        final picked = await showDatePicker(
-                          context: ctx,
-                          initialDate: startDate,
-                          firstDate: DateTime(2000),
-                          lastDate: DateTime(2040),
-                        );
-                        if (picked != null) {
-                          setDialogState(() => startDate = picked);
-                        }
-                      },
-                      child: const Text('পরিবর্তন'),
-                    ),
-                  ],
+                const Text('বছর নির্বাচন করুন:'),
+                DropdownButton<int>(
+                  isExpanded: true,
+                  value: selectedYear,
+                  items: List.generate(10, (i) {
+                    final yr = DateTime.now().year - i;
+                    return DropdownMenuItem(value: yr, child: Text('$yr সাল'));
+                  }),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setDialogState(() => selectedYear = val);
+                    }
+                  },
                 ),
-                Row(
-                  children: [
-                    Expanded(child: Text('শেষ তারিখ: ${fmt(endDate)}')),
-                    TextButton(
-                      onPressed: () async {
-                        final picked = await showDatePicker(
-                          context: ctx,
-                          initialDate: endDate,
-                          firstDate: DateTime(2000),
-                          lastDate: DateTime(2040),
-                        );
-                        if (picked != null) {
-                          setDialogState(() => endDate = picked);
-                        }
-                      },
-                      child: const Text('পরিবর্তন'),
-                    ),
-                  ],
-                ),
+                if (!isFullYear) ...[
+                  const SizedBox(height: 12),
+                  const Text('মাস নির্বাচন করুন:'),
+                  DropdownButton<int>(
+                    isExpanded: true,
+                    value: selectedMonth,
+                    items: List.generate(12, (i) {
+                      final m = i + 1;
+                      return DropdownMenuItem(value: m, child: Text('$m নম্বর মাস'));
+                    }),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setDialogState(() => selectedMonth = val);
+                      }
+                    },
+                  ),
+                ],
               ],
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.of(dialogCtx).pop(),
+                onPressed: () => Navigator.pop(ctx),
                 child: const Text('বাতিল'),
               ),
               ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                ),
                 onPressed: () async {
-                  Navigator.of(dialogCtx).pop();
-                  await Future.delayed(const Duration(milliseconds: 50));
-                  if (!parentContext.mounted) return;
-                  await PdfReportGenerator.generateCustomDateRangeSummaryReport(
-                    context: parentContext,
+                  Navigator.pop(ctx);
+                  await PdfReportGenerator.generatePeriodOrYearlySummaryReport(
+                    context: context,
                     societyName: societyName,
-                    startDate: startDate,
-                    endDate: endDate,
+                    year: selectedYear,
+                    month: isFullYear ? null : selectedMonth,
                     members: members,
                     businessRecords: businessRecords,
                   );
@@ -547,6 +548,7 @@ Future<void> showPeriodOrYearlyReportDialog({
     },
   );
 }
+
 Future<void> exportBoundaryToPdf(
   BuildContext context,
   GlobalKey boundaryKey,
@@ -1179,7 +1181,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     return months[month - 1];
   }
 
- String _formatShortDate(DateTime d) {
+  String _formatShortDate(DateTime d) {
     return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
   }
 
@@ -1335,11 +1337,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                           children: [
                             Text(
                               globalSocietyName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                                color: Colors.green,
-                              ),
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green),
                             ),
                             const SizedBox(height: 6),
                             Container(
@@ -1353,59 +1351,22 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    "সারসংক্ষেপ — $rangeLabel",
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                      color: Colors.teal,
-                                    ),
-                                  ),
+                                  Text("সারসংক্ষেপ — $rangeLabel", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.teal)),
                                   const Divider(),
-                                  Text(
-                                    "• মোট কিস্তি জমা: ৳${monthlyDepositTotal.toStringAsFixed(2)} ($monthlyDepositCountটি)",
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.green,
-                                    ),
-                                  ),
-                                  Text(
-                                    "• মোট লাভ বণ্টন: ৳${monthlyProfitTotal.toStringAsFixed(2)}",
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.blue,
-                                    ),
-                                  ),
-                                  Text(
-                                    "• ব্যবসায়িক আয়: ৳${monthlyBizIncome.toStringAsFixed(2)}",
-                                    style: const TextStyle(color: Colors.green),
-                                  ),
-                                  Text(
-                                    "• প্রজেক্ট খরচ: ৳${monthlyBizExpense.toStringAsFixed(2)}",
-                                    style: const TextStyle(color: Colors.red),
-                                  ),
+                                  Text("• মোট কিস্তি জমা: ৳${monthlyDepositTotal.toStringAsFixed(2)} ($monthlyDepositCountটি)", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                                  Text("• মোট লাভ বণ্টন: ৳${monthlyProfitTotal.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                                  Text("• ব্যবসায়িক আয়: ৳${monthlyBizIncome.toStringAsFixed(2)}", style: const TextStyle(color: Colors.green)),
+                                  Text("• প্রজেক্ট খরচ: ৳${monthlyBizExpense.toStringAsFixed(2)}", style: const TextStyle(color: Colors.red)),
                                 ],
                               ),
                             ),
                             const SizedBox(height: 12),
-                            const Text(
-                              "সদস্যদের লেনদেনসমূহ:",
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                              ),
-                            ),
+                            const Text("সদস্যদের লেনদেনসমূহ:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                             const SizedBox(height: 6),
                             memberMonthEntries.isEmpty
                                 ? const Padding(
                                     padding: EdgeInsets.symmetric(vertical: 8),
-                                    child: Text(
-                                      "এই সময়কালে কোনো সদস্যের লেনদেন নেই।",
-                                      style: TextStyle(
-                                        color: Colors.grey,
-                                        fontSize: 12,
-                                      ),
-                                    ),
+                                    child: Text("এই সময়কালে কোনো সদস্যের লেনদেন নেই।", style: TextStyle(color: Colors.grey, fontSize: 12)),
                                   )
                                 : ListView.builder(
                                     shrinkWrap: true,
@@ -1413,44 +1374,24 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                     itemCount: memberMonthEntries.length,
                                     itemBuilder: (context, idx) {
                                       Member m = memberMonthEntries[idx]['member'];
-                                      TransactionHistory t =
-                                          memberMonthEntries[idx]['tx'];
+                                      TransactionHistory t = memberMonthEntries[idx]['tx'];
                                       return Card(
                                         margin: const EdgeInsets.symmetric(vertical: 3),
                                         child: ListTile(
                                           dense: true,
-                                          title: Text(
-                                            "${m.name} (ID: ${m.id}) — ৳${t.amount.toStringAsFixed(2)}",
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          subtitle: Text(
-                                            "${t.date.day}/${t.date.month}/${t.date.year} | ${t.isProfit ? 'লাভ বণ্টন' : t.paymentMethod}",
-                                          ),
+                                          title: Text("${m.name} (ID: ${m.id}) — ৳${t.amount.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold)),
+                                          subtitle: Text("${t.date.day}/${t.date.month}/${t.date.year} | ${t.isProfit ? 'লাভ বণ্টন' : t.paymentMethod}"),
                                         ),
                                       );
                                     },
                                   ),
                             const SizedBox(height: 10),
-                            const Text(
-                              "ব্যবসার আয়-ব্যয় পোস্টিং:",
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                              ),
-                            ),
+                            const Text("ব্যবসার আয়-ব্যয় পোস্টিং:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                             const SizedBox(height: 6),
                             monthBizRecords.isEmpty
                                 ? const Padding(
                                     padding: EdgeInsets.symmetric(vertical: 8),
-                                    child: Text(
-                                      "এই সময়কালে কোনো ব্যবসায়িক পোস্টিং নেই।",
-                                      style: TextStyle(
-                                        color: Colors.grey,
-                                        fontSize: 12,
-                                      ),
-                                    ),
+                                    child: Text("এই সময়কালে কোনো ব্যবসায়িক পোস্টিং নেই।", style: TextStyle(color: Colors.grey, fontSize: 12)),
                                   )
                                 : ListView.builder(
                                     shrinkWrap: true,
@@ -1462,18 +1403,8 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                         margin: const EdgeInsets.symmetric(vertical: 3),
                                         child: ListTile(
                                           dense: true,
-                                          title: Text(
-                                            "${r.title} (${r.isIncome ? '+' : '-'}৳${r.amount.toStringAsFixed(2)})",
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              color: r.isIncome
-                                                  ? Colors.green
-                                                  : Colors.red,
-                                            ),
-                                          ),
-                                          subtitle: Text(
-                                            "তারিখ: ${r.date.day}/${r.date.month}/${r.date.year}",
-                                          ),
+                                          title: Text("${r.title} (${r.isIncome ? '+' : '-'}৳${r.amount.toStringAsFixed(2)})", style: TextStyle(fontWeight: FontWeight.bold, color: r.isIncome ? Colors.green : Colors.red)),
+                                          subtitle: Text("তারিখ: ${r.date.day}/${r.date.month}/${r.date.year}"),
                                         ),
                                       );
                                     },
@@ -1487,19 +1418,10 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               ),
             ),
             actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text("বন্ধ করুন"),
-              ),
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("বন্ধ করুন")),
               ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                ),
-                icon: const Icon(Icons.picture_as_pdf),
-                label: const Text("PDF ডাউনলোড"),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
                 onPressed: () async {
-                  Navigator.pop(ctx);
                   await PdfReportGenerator.generateCustomDateRangeSummaryReport(
                     context: context,
                     societyName: globalSocietyName,
@@ -1509,6 +1431,8 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                     businessRecords: globalBusinessRecords,
                   );
                 },
+                icon: const Icon(Icons.download, size: 16),
+                label: const Text("PDF ডাউনলোড"),
               ),
             ],
           );
@@ -1516,6 +1440,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       ),
     );
   }
+
   void _showPendingApprovalsDialog() {
     showDialog(
       context: context,
