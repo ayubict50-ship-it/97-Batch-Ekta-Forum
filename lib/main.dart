@@ -452,95 +452,88 @@ Future<void> showPeriodOrYearlyReportDialog({
   required List<Member> members,
   required List<BusinessRecord> businessRecords,
 }) async {
-  int selectedYear = DateTime.now().year;
-  bool isFullYear = true;
-  int selectedMonth = DateTime.now().month;
+  final BuildContext parentContext = context;
+  DateTime startDate = DateTime(DateTime.now().year, 1, 1);
+  DateTime endDate = DateTime.now();
+
+  String fmt(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
 
   await showDialog(
-    context: context,
-    builder: (ctx) {
+    context: parentContext,
+    builder: (dialogCtx) {
       return StatefulBuilder(
-        builder: (context, setDialogState) {
+        builder: (ctx, setDialogState) {
           return AlertDialog(
-            title: const Text('বার্ষিক ও মাসিক সার্বিক রিপোর্ট'),
+            title: const Text('তারিখ অনুযায়ী সার্বিক রিপোর্ট'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('রিপোর্টের ধরন বেছে নিন:'),
-                const SizedBox(height: 8),
-                DropdownButton<bool>(
-                  isExpanded: true,
-                  value: isFullYear,
-                  items: const [
-                    DropdownMenuItem(
-                      value: true,
-                      child: Text('পুরো বছর (০১ জানুয়ারি - ৩১ ডিসেম্বর)'),
-                    ),
-                    DropdownMenuItem(
-                      value: false,
-                      child: Text('নির্দিষ্ট বছরের একটি মাস'),
-                    ),
-                  ],
-                  onChanged: (val) {
-                    if (val != null) {
-                      setDialogState(() => isFullYear = val);
-                    }
-                  },
+                const Text(
+                  'শুরুর তারিখ ও শেষ তারিখ নির্বাচন করুন:',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
                 ),
                 const SizedBox(height: 12),
-                const Text('বছর নির্বাচন করুন:'),
-                DropdownButton<int>(
-                  isExpanded: true,
-                  value: selectedYear,
-                  items: List.generate(10, (i) {
-                    final yr = DateTime.now().year - i;
-                    return DropdownMenuItem(value: yr, child: Text('$yr সাল'));
-                  }),
-                  onChanged: (val) {
-                    if (val != null) {
-                      setDialogState(() => selectedYear = val);
-                    }
-                  },
+                Row(
+                  children: [
+                    Expanded(child: Text('শুরুর তারিখ: ${fmt(startDate)}')),
+                    TextButton(
+                      onPressed: () async {
+                        final picked = await showDatePicker(
+                          context: ctx,
+                          initialDate: startDate,
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime(2040),
+                        );
+                        if (picked != null) {
+                          setDialogState(() => startDate = picked);
+                        }
+                      },
+                      child: const Text('পরিবর্তন'),
+                    ),
+                  ],
                 ),
-                if (!isFullYear) ...[
-                  const SizedBox(height: 12),
-                  const Text('মাস নির্বাচন করুন:'),
-                  DropdownButton<int>(
-                    isExpanded: true,
-                    value: selectedMonth,
-                    items: List.generate(12, (i) {
-                      final m = i + 1;
-                      return DropdownMenuItem(value: m, child: Text('$m নম্বর মাস'));
-                    }),
-                    onChanged: (val) {
-                      if (val != null) {
-                        setDialogState(() => selectedMonth = val);
-                      }
-                    },
-                  ),
-                ],
+                Row(
+                  children: [
+                    Expanded(child: Text('শেষ তারিখ: ${fmt(endDate)}')),
+                    TextButton(
+                      onPressed: () async {
+                        final picked = await showDatePicker(
+                          context: ctx,
+                          initialDate: endDate,
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime(2040),
+                        );
+                        if (picked != null) {
+                          setDialogState(() => endDate = picked);
+                        }
+                      },
+                      child: const Text('পরিবর্তন'),
+                    ),
+                  ],
+                ),
               ],
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(ctx),
+                onPressed: () => Navigator.of(dialogCtx).pop(),
                 child: const Text('বাতিল'),
               ),
               ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                ),
                 onPressed: () async {
-                  Navigator.pop(ctx);
-                  final DateTime startRange = isFullYear
-                      ? DateTime(selectedYear, 1, 1)
-                      : DateTime(selectedYear, selectedMonth, 1);
-                  final DateTime endRange = isFullYear
-                      ? DateTime(selectedYear, 12, 31)
-                      : DateTime(selectedYear, selectedMonth + 1, 0);
+                  Navigator.of(dialogCtx).pop();
+                  await Future.delayed(const Duration(milliseconds: 50));
+                  if (!parentContext.mounted) return;
                   await PdfReportGenerator.generateCustomDateRangeSummaryReport(
-                    context: context,
+                    context: parentContext,
                     societyName: societyName,
-                    startDate: startRange,
-                    endDate: endRange,
+                    startDate: startDate,
+                    endDate: endDate,
                     members: members,
                     businessRecords: businessRecords,
                   );
@@ -554,7 +547,6 @@ Future<void> showPeriodOrYearlyReportDialog({
     },
   );
 }
-
 Future<void> exportBoundaryToPdf(
   BuildContext context,
   GlobalKey boundaryKey,
@@ -1187,76 +1179,25 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     return months[month - 1];
   }
 
-  String _formatShortDate(DateTime d) {
-    return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
-  }
-
   void _showMonthlyReportDialog() {
-    final DateTime now = DateTime.now();
-    DateTime startDate = DateTime(now.year, now.month, 1);
-    DateTime endDate = DateTime(now.year, now.month, now.day);
+    int selectedYear = DateTime.now().year;
+    int selectedMonth = DateTime.now().month;
     final GlobalKey monthlyBoundaryKey = GlobalKey();
-
-    Future<void> pickStartDate(StateSetter setDialogState) async {
-      final DateTime? picked = await showDatePicker(
-        context: context,
-        initialDate: startDate,
-        firstDate: DateTime(2019, 1, 1),
-        lastDate: DateTime(2100, 12, 31),
-      );
-      if (picked != null) {
-        setDialogState(() {
-          startDate = picked;
-          if (endDate.isBefore(startDate)) {
-            endDate = startDate;
-          }
-        });
-      }
-    }
-
-    Future<void> pickEndDate(StateSetter setDialogState) async {
-      final DateTime? picked = await showDatePicker(
-        context: context,
-        initialDate: endDate.isBefore(startDate) ? startDate : endDate,
-        firstDate: DateTime(2019, 1, 1),
-        lastDate: DateTime(2100, 12, 31),
-      );
-      if (picked != null) {
-        setDialogState(() {
-          endDate = picked;
-          if (endDate.isBefore(startDate)) {
-            startDate = endDate;
-          }
-        });
-      }
-    }
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) {
-          final DateTime actualStart =
-              startDate.isBefore(endDate) ? startDate : endDate;
-          final DateTime actualEnd =
-              startDate.isBefore(endDate) ? endDate : startDate;
-
-          final DateTime rangeStart = DateTime(
-              actualStart.year, actualStart.month, actualStart.day, 0, 0, 0);
-          final DateTime rangeEnd = DateTime(
-              actualEnd.year, actualEnd.month, actualEnd.day, 23, 59, 59);
-
-          bool inRange(DateTime d) {
-            return !d.isBefore(rangeStart) && !d.isAfter(rangeEnd);
-          }
-
           double monthlyDepositTotal = 0.0;
           int monthlyDepositCount = 0;
           double monthlyProfitTotal = 0.0;
-          final memberMonthEntries = [];
+          List memberMonthEntries = [];
 
           for (var member in globalMembers) {
             for (var tx in member.transactions) {
-              if (tx.status == 'approved' && inRange(tx.date)) {
+              if (tx.status == 'approved' &&
+                  tx.date.year == selectedYear &&
+                  tx.date.month == selectedMonth) {
                 if (tx.isProfit) {
                   monthlyProfitTotal += tx.amount;
                 } else {
@@ -1271,22 +1212,17 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
             }
           }
 
-          final monthBizRecords = globalBusinessRecords
-              .where((r) => inRange(r.date))
+          var monthBizRecords = globalBusinessRecords
+              .where((r) => r.date.year == selectedYear && r.date.month == selectedMonth)
               .toList();
 
-          double monthlyBizIncome = monthBizRecords
-              .where((r) => r.isIncome)
-              .fold(0.0, (sum, r) => sum + r.amount);
-          double monthlyBizExpense = monthBizRecords
-              .where((r) => !r.isIncome)
-              .fold(0.0, (sum, r) => sum + r.amount);
+          double monthlyBizIncome = monthBizRecords.where((r) => r.isIncome).fold(0.0, (sum, r) => sum + r.amount);
+          double monthlyBizExpense = monthBizRecords.where((r) => !r.isIncome).fold(0.0, (sum, r) => sum + r.amount);
 
-          String rangeLabel =
-              "${_formatShortDate(actualStart)} থেকে ${_formatShortDate(actualEnd)}";
+          String monthLabel = "${_getBengaliMonthName(selectedMonth)} $selectedYear";
 
           return AlertDialog(
-            title: const Text("🗓 মাস ভিত্তিক রিপোর্ট (তারিখ অনুযায়ী)"),
+            title: const Text("🗓 মাস ভিত্তিক রিপোর্ট"),
             content: SizedBox(
               width: double.maxFinite,
               child: SingleChildScrollView(
@@ -1294,43 +1230,56 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.grey.shade300),
-                      ),
-                      child: Column(
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                "শুরুর তারিখ: ${_formatShortDate(startDate)}",
-                                style: const TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                              TextButton(
-                                onPressed: () => pickStartDate(setDialogState),
-                                child: const Text("পরিবর্তন"),
-                              ),
-                            ],
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: DropdownButtonFormField<int>(
+                            value: selectedMonth,
+                            decoration: const InputDecoration(
+                              labelText: "মাস নির্বাচন",
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            ),
+                            items: List.generate(12, (idx) {
+                              int mNum = idx + 1;
+                              return DropdownMenuItem<int>(
+                                value: mNum,
+                                child: Text(_getBengaliMonthName(mNum)),
+                              );
+                            }),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setDialogState(() => selectedMonth = val);
+                              }
+                            },
                           ),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                "শেষ তারিখ: ${_formatShortDate(endDate)}",
-                                style: const TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                              TextButton(
-                                onPressed: () => pickEndDate(setDialogState),
-                                child: const Text("পরিবর্তন"),
-                              ),
-                            ],
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          flex: 2,
+                          child: DropdownButtonFormField<int>(
+                            value: selectedYear,
+                            decoration: const InputDecoration(
+                              labelText: "বছর নির্বাচন",
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            ),
+                            items: List.generate(16, (idx) {
+                              int yr = 2019 + idx;
+                              return DropdownMenuItem<int>(
+                                value: yr,
+                                child: Text("$yr"),
+                              );
+                            }),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setDialogState(() => selectedYear = val);
+                              }
+                            },
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 12),
                     RepaintBoundary(
@@ -1357,7 +1306,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text("সারসংক্ষেপ — $rangeLabel", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.teal)),
+                                  Text("সারসংক্ষেপ — $monthLabel", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.teal)),
                                   const Divider(),
                                   Text("• মোট কিস্তি জমা: ৳${monthlyDepositTotal.toStringAsFixed(2)} ($monthlyDepositCountটি)", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
                                   Text("• মোট লাভ বণ্টন: ৳${monthlyProfitTotal.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
@@ -1372,7 +1321,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                             memberMonthEntries.isEmpty
                                 ? const Padding(
                                     padding: EdgeInsets.symmetric(vertical: 8),
-                                    child: Text("এই সময়কালে কোনো সদস্যের লেনদেন নেই।", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                    child: Text("এই মাসে কোনো সদস্যের লেনদেন নেই।", style: TextStyle(color: Colors.grey, fontSize: 12)),
                                   )
                                 : ListView.builder(
                                     shrinkWrap: true,
@@ -1397,7 +1346,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                             monthBizRecords.isEmpty
                                 ? const Padding(
                                     padding: EdgeInsets.symmetric(vertical: 8),
-                                    child: Text("এই সময়কালে কোনো ব্যবসায়িক পোস্টিং নেই।", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                    child: Text("এই মাসে কোনো ব্যবসায়িক পোস্টিং নেই।", style: TextStyle(color: Colors.grey, fontSize: 12)),
                                   )
                                 : ListView.builder(
                                     shrinkWrap: true,
@@ -1428,13 +1377,19 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
                 onPressed: () async {
-                  await PdfReportGenerator.generateCustomDateRangeSummaryReport(
+                  await PdfReportGenerator.generateMonthlyReport(
                     context: context,
                     societyName: globalSocietyName,
-                    startDate: actualStart,
-                    endDate: actualEnd,
-                    members: globalMembers,
-                    businessRecords: globalBusinessRecords,
+                    monthLabel: monthLabel,
+                    selectedMonth: selectedMonth,
+                    selectedYear: selectedYear,
+                    monthlyDepositTotal: monthlyDepositTotal,
+                    monthlyDepositCount: monthlyDepositCount,
+                    monthlyProfitTotal: monthlyProfitTotal,
+                    monthlyBizIncome: monthlyBizIncome,
+                    monthlyBizExpense: monthlyBizExpense,
+                    memberMonthEntries: memberMonthEntries,
+                    monthBizRecords: monthBizRecords,
                   );
                 },
                 icon: const Icon(Icons.download, size: 16),
