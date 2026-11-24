@@ -321,7 +321,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-          StreamBuilder<QuerySnapshot>>(
+          StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('society_documents')
                   .orderBy('createdAt', descending: true)
