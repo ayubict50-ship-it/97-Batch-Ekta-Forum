@@ -768,7 +768,7 @@ class PdfReportGenerator {
                   Padding(padding: EdgeInsets.all(6), child: Text('সদস্যের নাম', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
                   Padding(padding: EdgeInsets.all(6), child: Text('সময়ের সঞ্চয়', textAlign: TextAlign.right, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
                   Padding(padding: EdgeInsets.all(6), child: Text('প্রাপ্ত লাভ', textAlign: TextAlign.right, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
-                  Padding(padding: EdgeInsets.all(6), child: Text('মোট যুক্ত', textAlign: TextAlign.right, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                  Padding(padding: EdgeInsets.all(6), child: Text('মোট স্থিতি', textAlign: TextAlign.right, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
                 ],
               ),
               ...members.asMap().entries.map((entry) {
