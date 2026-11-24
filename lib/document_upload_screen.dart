@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-
+import 'dart:io';
 class DocumentUploadScreen extends StatefulWidget {
   final String societyName;
   final String uploadedBy;
@@ -142,6 +142,37 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
     }
   }
 
+Future<void> _downloadImageBytes(String title, Uint8List bytes) async {
+    try {
+      final String safeName = title
+          .trim()
+          .replaceAll(RegExp(r'[^\w\s\u0980-\u09FF-]'), '_')
+          .replaceAll(RegExp(r'\s+'), '_');
+      final String fileName =
+          '${safeName.isEmpty ? 'document' : safeName}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+      final Directory downloadDir = Directory('/storage/emulated/0/Download');
+      if (!await downloadDir.exists()) {
+        await downloadDir.create(recursive: true);
+      }
+
+      final File outFile = File('${downloadDir.path}/$fileName');
+      await outFile.writeAsBytes(bytes);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('ছবি ডাউনলোড হয়েছে: ${outFile.path}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('ডাউনলোড করতে সমস্যা হয়েছে: $e')),
+        );
+      }
+    }
+  }
+
   void _openFullImage(String title, Uint8List bytes) {
     showDialog(
       context: context,
@@ -153,6 +184,11 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
               title: Text(title, style: const TextStyle(fontSize: 15)),
               automaticallyImplyLeading: false,
               actions: [
+                IconButton(
+                  icon: const Icon(Icons.download),
+                  tooltip: 'ডাউনলোড করুন',
+                  onPressed: () => _downloadImageBytes(title, bytes),
+                ),
                 IconButton(
                   icon: const Icon(Icons.close),
                   onPressed: () => Navigator.pop(ctx),
