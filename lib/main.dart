@@ -15,7 +15,7 @@ import 'package:open_file/open_file.dart';
 import 'due_reminder_feature.dart';
 import 'net_capital_feature.dart';
 import 'pdf_report_generator.dart';
-
+import 'document_upload_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -3185,6 +3185,33 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 ],
               ),
             ),
+            const SizedBox(height: 6),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.teal.shade800,
+                    side: BorderSide(color: Colors.teal.shade800),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => DocumentUploadScreen(
+                          societyName: globalSocietyName,
+                          uploadedBy: 'ম্যানেজার ($globalAdminId)',
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.folder_open, size: 16),
+                  label: const Text(
+                    "সমিতির ডকুমেন্ট আপলোড",
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
             NetCapitalSummaryCard(totalMembersSavings: totalCollection),
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
