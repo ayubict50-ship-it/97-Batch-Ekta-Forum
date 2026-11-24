@@ -350,7 +350,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: docs.length,
                   itemBuilder: (context, index) {
-                    final data = docs[index].data();
+                final data = (docs[index].data() as Map<String, dynamic>?) ?? {};
                     final String title = (data['title'] ?? '').toString();
                     final String category = (data['category'] ?? '').toString();
                     final String desc = (data['description'] ?? '').toString();
