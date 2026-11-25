@@ -2620,6 +2620,66 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     );
   }
 
+  void _deleteTransactionWithConfirmation(
+    Member member,
+    TransactionHistory tx, {
+    VoidCallback? onDeleted,
+  }) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("⚠️ কিস্তি/লেনদেন ডিলিট নিশ্চিতকরণ"),
+        content: Text(
+          "${member.name}-এর ${tx.date.day}/${tx.date.month}/${tx.date.year} তারিখের ৳${tx.amount.toStringAsFixed(2)} (${tx.paymentMethod}) এন্ট্রিটি ডিলিট করতে চান?",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("বাতিল"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              final bool removed = member.transactions.remove(tx);
+              if (!removed) {
+                Navigator.pop(ctx);
+                return;
+              }
+
+              setState(() {
+                if (tx.status == 'approved') {
+                  if (tx.isProfit) {
+                    member.profitEarned = double.parse(
+                      (member.profitEarned - tx.amount).clamp(0.0, double.infinity).toStringAsFixed(2),
+                    );
+                  } else {
+                    member.deposit = double.parse(
+                      (member.deposit - tx.amount).clamp(0.0, double.infinity).toStringAsFixed(2),
+                    );
+                  }
+                }
+              });
+
+              await CloudDatabaseService.syncAllDataToCloud();
+              onDeleted?.call();
+
+              if (mounted) {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("এন্ট্রি সফলভাবে ডিলিট ও ক্লাউডে আপডেট হয়েছে!")),
+                );
+              }
+            },
+            child: const Text("হ্যাঁ, ডিলিট করুন"),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showEditTransactionDialog(
     Member member,
     TransactionHistory tx, {
@@ -2756,13 +2816,13 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         builder: (context, setDialogState) {
           final currentList = member.transactions.where((t) => !t.isProfit).toList();
           return AlertDialog(
-            title: Text("${member.name}-এর কিস্তিসমূহ এডিট"),
+            title: Text("${member.name}-এর কিস্তিসমূহ এডিট / ডিলিট"),
             content: SizedBox(
               width: double.maxFinite,
               child: currentList.isEmpty
                   ? const Padding(
                       padding: EdgeInsets.all(16),
-                      child: Text("এডিট করার মতো কোনো কিস্তি পাওয়া যায়নি।", textAlign: TextAlign.center),
+                      child: Text("এডিট বা ডিলিট করার মতো কোনো কিস্তি পাওয়া যায়নি।", textAlign: TextAlign.center),
                     )
                   : ListView.builder(
                       shrinkWrap: true,
@@ -2780,15 +2840,32 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                             subtitle: Text(
                               "${tx.paymentMethod}${tx.status == 'pending' ? ' (পেন্ডিং)' : ''}",
                             ),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.edit, color: Colors.teal),
-                              onPressed: () {
-                                _showEditTransactionDialog(
-                                  member,
-                                  tx,
-                                  onSaved: () => setDialogState(() {}),
-                                );
-                              },
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit, color: Colors.teal, size: 20),
+                                  tooltip: "এডিট করুন",
+                                  onPressed: () {
+                                    _showEditTransactionDialog(
+                                      member,
+                                      tx,
+                                      onSaved: () => setDialogState(() {}),
+                                    );
+                                  },
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                                  tooltip: "ডিলিট করুন",
+                                  onPressed: () {
+                                    _deleteTransactionWithConfirmation(
+                                      member,
+                                      tx,
+                                      onDeleted: () => setDialogState(() {}),
+                                    );
+                                  },
+                                ),
+                              ],
                             ),
                           ),
                         );
@@ -2939,16 +3016,32 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                       dense: true,
                                       title: Text("${tx.date.day}/${tx.date.month}/${tx.date.year} — ৳${tx.amount.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold)),
                                       subtitle: Text("${tx.paymentMethod} ${tx.trxId.isNotEmpty ? '(Trx: ${tx.trxId})' : ''}"),
-                                      trailing: IconButton(
-                                        icon: const Icon(Icons.edit, size: 18, color: Colors.teal),
-                                        tooltip: "এডিট করুন",
-                                        onPressed: () {
-                                          _showEditTransactionDialog(
-                                            member,
-                                            tx,
-                                            onSaved: () => setDialogState(() {}),
-                                          );
-                                        },
+                                      trailing: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          IconButton(
+                                            icon: const Icon(Icons.edit, size: 18, color: Colors.teal),
+                                            tooltip: "এডিট করুন",
+                                            onPressed: () {
+                                              _showEditTransactionDialog(
+                                                member,
+                                                tx,
+                                                onSaved: () => setDialogState(() {}),
+                                              );
+                                            },
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(Icons.delete, size: 18, color: Colors.red),
+                                            tooltip: "ডিলিট করুন",
+                                            onPressed: () {
+                                              _deleteTransactionWithConfirmation(
+                                                member,
+                                                tx,
+                                                onDeleted: () => setDialogState(() {}),
+                                              );
+                                            },
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   );
@@ -3009,7 +3102,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               ),
               ListTile(
                 leading: const Icon(Icons.edit_calendar, color: Colors.teal),
-                title: const Text("কিস্তি এডিট করুন"),
+                title: const Text("কিস্তি এডিট / ডিলিট করুন"),
                 onTap: () {
                   Navigator.pop(ctx);
                   _showEditInstallmentListDialog(member);
