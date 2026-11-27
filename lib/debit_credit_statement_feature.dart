@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
@@ -305,7 +306,7 @@ Future<void> _generateDebitCreditPdf({
 
   pw.Font? bengaliFont;
   try {
-    final fontData = await rootBundle.load('assets/fonts/SolaimanLipi.ttf');
+    final fontData = await rootBundle.load('assets/fonts/NikoshBAN.ttf')
     bengaliFont = pw.Font.ttf(fontData);
   } catch (_) {}
 
