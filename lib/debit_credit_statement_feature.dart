@@ -22,49 +22,39 @@ Future<void> showDebitCreditStatementDialog({
   String fmtDate(DateTime d) =>
       '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
 
+  bool isWithinDateRange(DateTime txDate, DateTime start, DateTime end) {
+    final DateTime d = DateTime(txDate.year, txDate.month, txDate.day);
+    final DateTime s = DateTime(start.year, start.month, start.day);
+    final DateTime e = DateTime(end.year, end.month, end.day);
+    return !d.isBefore(s) && !d.isAfter(e);
+  }
+
   await showDialog(
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (context, setDialogState) {
-        final DateTime normalizedStart =
-            DateTime(startDate.year, startDate.month, startDate.day);
-        final DateTime normalizedEnd =
-            DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
-
-        double totalMemberDepositCredit = 0.0;
-        double totalBusinessIncomeCredit = 0.0;
-        double totalBusinessExpenseDebit = 0.0;
-        double totalProfitDistributionDebit = 0.0;
+        double totalInstallmentCredit = 0.0;
+        double totalProfitDebit = 0.0;
+        double totalExpenseDebit = 0.0;
 
         final entries = [];
 
+        // ১. ক্রেডিট (+): নির্বাচিত তারিখের মধ্যে সকল অনুমোদিত কিস্তির টাকা
         for (final member in members) {
           for (final tx in member.transactions) {
             if (tx.status != 'approved') continue;
-            if (tx.date.isBefore(normalizedStart) ||
-                tx.date.isAfter(normalizedEnd)) {
-              continue;
-            }
+            if (!isWithinDateRange(tx.date, startDate, endDate)) continue;
 
-            if (tx.isProfit) {
-              totalProfitDistributionDebit += tx.amount;
+            if (!tx.isProfit) {
+              totalInstallmentCredit += tx.amount;
+              final String memberLabel =
+                  member.name.isNotEmpty ? member.name : 'সদস্য';
+              final String txType =
+                  tx.paymentMethod.isNotEmpty ? tx.paymentMethod : 'কিস্তি';
               entries.add({
                 'date': tx.date,
-                'title': 'সদস্যদের লাভ বণ্টন',
-                'sub': tx.paymentMethod.isNotEmpty
-                    ? tx.paymentMethod
-                    : 'লাভ বণ্টন',
-                'amount': tx.amount,
-                'isCredit': false,
-              });
-            } else {
-              totalMemberDepositCredit += tx.amount;
-              entries.add({
-                'date': tx.date,
-                'title': 'সদস্য কিস্তি / সঞ্চয় জমা',
-                'sub': tx.paymentMethod.isNotEmpty
-                    ? tx.paymentMethod
-                    : 'কিস্তি জমা',
+                'title': '$memberLabel-এর $txType',
+                'sub': 'কিস্তি (ক্রেডিট)',
                 'amount': tx.amount,
                 'isCredit': true,
               });
@@ -72,29 +62,25 @@ Future<void> showDebitCreditStatementDialog({
           }
         }
 
+        // ২. ডেবিট (-): নির্বাচিত তারিখের মধ্যে সকল লাভ ও সকল খরচ
         for (final record in businessRecords) {
-          if (record.date.isBefore(normalizedStart) ||
-              record.date.isAfter(normalizedEnd)) {
-            continue;
-          }
+          if (!isWithinDateRange(record.date, startDate, endDate)) continue;
 
           if (record.isIncome) {
-            totalBusinessIncomeCredit += record.amount;
+            totalProfitDebit += record.amount;
             entries.add({
               'date': record.date,
-              'title': record.title.isNotEmpty ? record.title : 'ব্যবসায়িক আয়',
-              'sub': 'সমিতির ব্যবসায়িক আয়',
+              'title': record.title.isNotEmpty ? record.title : 'লাভ',
+              'sub': 'লাভ (ডেবিট)',
               'amount': record.amount,
-              'isCredit': true,
+              'isCredit': false,
             });
           } else {
-            totalBusinessExpenseDebit += record.amount;
+            totalExpenseDebit += record.amount;
             entries.add({
               'date': record.date,
-              'title': record.title.isNotEmpty
-                  ? record.title
-                  : 'প্রজেক্ট / ব্যবসায়িক খরচ',
-              'sub': 'সমিতির খরচ',
+              'title': record.title.isNotEmpty ? record.title : 'খরচ',
+              'sub': 'খরচ (ডেবিট)',
               'amount': record.amount,
               'isCredit': false,
             });
@@ -104,14 +90,12 @@ Future<void> showDebitCreditStatementDialog({
         entries.sort(
             (a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
 
-        final double totalCredit =
-            totalMemberDepositCredit + totalBusinessIncomeCredit;
-        final double totalDebit =
-            totalBusinessExpenseDebit + totalProfitDistributionDebit;
+        final double totalCredit = totalInstallmentCredit;
+        final double totalDebit = totalProfitDebit + totalExpenseDebit;
         final double netBalance = totalCredit - totalDebit;
 
         return AlertDialog(
-          title: const Text("⚖️ সমিতির ডেবিট–ক্রেডিট স্টেটমেন্ট"),
+          title: const Text("⚖️ তারিখ ভিত্তিক ডেবিট–ক্রেডিট স্টেটমেন্ট"),
           content: SizedBox(
             width: double.maxFinite,
             child: SingleChildScrollView(
@@ -119,51 +103,70 @@ Future<void> showDebitCreditStatementDialog({
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text("শুরু: ${fmtDate(startDate)}",
-                            style: const TextStyle(fontSize: 12)),
-                      ),
-                      TextButton(
-                        onPressed: () async {
-                          final picked = await showDatePicker(
-                            context: context,
-                            initialDate: startDate,
-                            firstDate: DateTime(2015),
-                            lastDate: DateTime(2035),
-                          );
-                          if (picked != null) {
-                            setDialogState(() => startDate = picked);
-                          }
-                        },
-                        child: const Text("তারিখ দিন",
-                            style: TextStyle(fontSize: 12)),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text("শেষ: ${fmtDate(endDate)}",
-                            style: const TextStyle(fontSize: 12)),
-                      ),
-                      TextButton(
-                        onPressed: () async {
-                          final picked = await showDatePicker(
-                            context: context,
-                            initialDate: endDate,
-                            firstDate: DateTime(2015),
-                            lastDate: DateTime(2035),
-                          );
-                          if (picked != null) {
-                            setDialogState(() => endDate = picked);
-                          }
-                        },
-                        child: const Text("তারিখ দিন",
-                            style: TextStyle(fontSize: 12)),
-                      ),
-                    ],
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text("শুরু তারিখ: ${fmtDate(startDate)}",
+                                  style: const TextStyle(
+                                      fontSize: 12, fontWeight: FontWeight.w600)),
+                            ),
+                            TextButton(
+                              onPressed: () async {
+                                final picked = await showDatePicker(
+                                  context: context,
+                                  initialDate: startDate,
+                                  firstDate: DateTime(2015),
+                                  lastDate: DateTime(2035),
+                                );
+                                if (picked != null) {
+                                  setDialogState(() {
+                                    startDate = picked;
+                                    if (endDate.isBefore(startDate)) {
+                                      endDate = startDate;
+                                    }
+                                  });
+                                }
+                              },
+                              child: const Text("তারিখ দিন",
+                                  style: TextStyle(fontSize: 12)),
+                            ),
+                          ],
+                        ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text("শেষ তারিখ: ${fmtDate(endDate)}",
+                                  style: const TextStyle(
+                                      fontSize: 12, fontWeight: FontWeight.w600)),
+                            ),
+                            TextButton(
+                              onPressed: () async {
+                                final picked = await showDatePicker(
+                                  context: context,
+                                  initialDate: endDate,
+                                  firstDate: startDate,
+                                  lastDate: DateTime(2035),
+                                );
+                                if (picked != null) {
+                                  setDialogState(() => endDate = picked);
+                                }
+                              },
+                              child: const Text("তারিখ দিন",
+                                  style: TextStyle(fontSize: 12)),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Container(
@@ -178,52 +181,49 @@ Future<void> showDebitCreditStatementDialog({
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "• কিস্তি/সঞ্চয় ক্রেডিট: ৳${totalMemberDepositCredit.toStringAsFixed(2)}",
+                          "সময়সীমা: ${fmtDate(startDate)} থেকে ${fmtDate(endDate)}",
                           style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.green,
-                              fontWeight: FontWeight.w600),
-                        ),
-                        Text(
-                          "• ব্যবসায়িক আয় ক্রেডিট: ৳${totalBusinessIncomeCredit.toStringAsFixed(2)}",
-                          style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.green,
-                              fontWeight: FontWeight.w600),
-                        ),
-                        Text(
-                          "মোট ক্রেডিট (+): ৳${totalCredit.toStringAsFixed(2)}",
-                          style: const TextStyle(
+                              fontSize: 11,
                               fontWeight: FontWeight.bold,
-                              color: Colors.green),
+                              color: Colors.black87),
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          "• প্রজেক্ট/ব্যবসায়িক খরচ ডেবিট: ৳${totalBusinessExpenseDebit.toStringAsFixed(2)}",
+                          "• মোট কিস্তি (ক্রেডিট +): ৳${totalInstallmentCredit.toStringAsFixed(2)}",
+                          style: const TextStyle(
+                              fontSize: 13,
+                              color: Colors.green,
+                              fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          "• মোট লাভ (ডেবিট -): ৳${totalProfitDebit.toStringAsFixed(2)}",
                           style: const TextStyle(
                               fontSize: 12,
                               color: Colors.red,
                               fontWeight: FontWeight.w600),
                         ),
                         Text(
-                          "• লাভ বণ্টন ডেবিট: ৳${totalProfitDistributionDebit.toStringAsFixed(2)}",
+                          "• মোট খরচ (ডেবিট -): ৳${totalExpenseDebit.toStringAsFixed(2)}",
                           style: const TextStyle(
                               fontSize: 12,
                               color: Colors.red,
                               fontWeight: FontWeight.w600),
                         ),
                         Text(
-                          "মোট ডেবিট (-): ৳${totalDebit.toStringAsFixed(2)}",
+                          "মোট ডেবিট (লাভ + খরচ): ৳${totalDebit.toStringAsFixed(2)}",
                           style: const TextStyle(
                               fontWeight: FontWeight.bold, color: Colors.red),
                         ),
                         const Divider(height: 10),
                         Text(
-                          "নিট তহবিল ব্যালেন্স: ৳${netBalance.toStringAsFixed(2)}",
+                          "নিট ব্যালেন্স (ক্রেডিট - ডেবিট): ৳${netBalance.toStringAsFixed(2)}",
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: netBalance >= 0 ? Colors.indigo : Colors.red,
+                            fontSize: 13,
+                            color: netBalance >= 0
+                                ? Colors.indigo
+                                : Colors.red,
                           ),
                         ),
                       ],
@@ -235,7 +235,7 @@ Future<void> showDebitCreditStatementDialog({
                           padding: EdgeInsets.all(16),
                           child: Center(
                             child: Text(
-                                "নির্বাচিত তারিখের মধ্যে কোনো এন্ট্রি পাওয়া যায়নি।"),
+                                "নির্বাচিত তারিখের মধ্যে কোনো কিস্তি, লাভ বা খরচের হিসাব নেই।"),
                           ),
                         )
                       : ListView.builder(
@@ -314,11 +314,9 @@ Future<void> showDebitCreditStatementDialog({
                           societyName: societyName,
                           startDate: startDate,
                           endDate: endDate,
-                          totalMemberDepositCredit: totalMemberDepositCredit,
-                          totalBusinessIncomeCredit: totalBusinessIncomeCredit,
-                          totalBusinessExpenseDebit: totalBusinessExpenseDebit,
-                          totalProfitDistributionDebit:
-                              totalProfitDistributionDebit,
+                          totalInstallmentCredit: totalInstallmentCredit,
+                          totalProfitDebit: totalProfitDebit,
+                          totalExpenseDebit: totalExpenseDebit,
                           totalCredit: totalCredit,
                           totalDebit: totalDebit,
                           netBalance: netBalance,
@@ -354,10 +352,9 @@ Future<void> _generateRepaintedDebitCreditPdf({
   required String societyName,
   required DateTime startDate,
   required DateTime endDate,
-  required double totalMemberDepositCredit,
-  required double totalBusinessIncomeCredit,
-  required double totalBusinessExpenseDebit,
-  required double totalProfitDistributionDebit,
+  required double totalInstallmentCredit,
+  required double totalProfitDebit,
+  required double totalExpenseDebit,
   required double totalCredit,
   required double totalDebit,
   required double netBalance,
@@ -372,7 +369,7 @@ Future<void> _generateRepaintedDebitCreditPdf({
   final sheetWidget = Material(
     color: Colors.white,
     child: Container(
-      width: 794, // A4 অনুপাতে পরিষ্কার রেন্ডারিং প্রস্থ
+      width: 794,
       padding: const EdgeInsets.all(28),
       color: Colors.white,
       child: DefaultTextStyle(
@@ -396,7 +393,7 @@ Future<void> _generateRepaintedDebitCreditPdf({
             ),
             const SizedBox(height: 4),
             Text(
-              'সমিতির সামগ্রিক ডেবিট-ক্রেডিট স্টেটমেন্ট (${fmtDate(startDate)} - ${fmtDate(endDate)})',
+              'তারিখ ভিত্তিক ডেবিট-ক্রেডিট স্টেটমেন্ট (${fmtDate(startDate)} - ${fmtDate(endDate)})',
               style: const TextStyle(
                 fontFamily: 'NikoshBAN',
                 fontSize: 15,
@@ -417,32 +414,25 @@ Future<void> _generateRepaintedDebitCreditPdf({
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '• কিস্তি/সঞ্চয় ক্রেডিট: ৳${totalMemberDepositCredit.toStringAsFixed(2)}',
+                    'হিসাবের সময়সীমা: ${fmtDate(startDate)} থেকে ${fmtDate(endDate)}',
                     style: const TextStyle(
                         fontFamily: 'NikoshBAN',
                         fontSize: 13,
-                        color: Colors.green,
-                        fontWeight: FontWeight.w600),
-                  ),
-                  Text(
-                    '• ব্যবসায়িক আয় ক্রেডিট: ৳${totalBusinessIncomeCredit.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                        fontFamily: 'NikoshBAN',
-                        fontSize: 13,
-                        color: Colors.green,
-                        fontWeight: FontWeight.w600),
-                  ),
-                  Text(
-                    'মোট ক্রেডিট (+): ৳${totalCredit.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                        fontFamily: 'NikoshBAN',
-                        fontSize: 14,
                         fontWeight: FontWeight.bold,
-                        color: Colors.green),
+                        color: Colors.black87),
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '• প্রজেক্ট/ব্যবসায়িক খরচ ডেবিট: ৳${totalBusinessExpenseDebit.toStringAsFixed(2)}',
+                    '• মোট কিস্তি (ক্রেডিট +): ৳${totalInstallmentCredit.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                        fontFamily: 'NikoshBAN',
+                        fontSize: 14,
+                        color: Colors.green,
+                        fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '• মোট লাভ (ডেবিট -): ৳${totalProfitDebit.toStringAsFixed(2)}',
                     style: const TextStyle(
                         fontFamily: 'NikoshBAN',
                         fontSize: 13,
@@ -450,7 +440,7 @@ Future<void> _generateRepaintedDebitCreditPdf({
                         fontWeight: FontWeight.w600),
                   ),
                   Text(
-                    '• লাভ বণ্টন ডেবিট: ৳${totalProfitDistributionDebit.toStringAsFixed(2)}',
+                    '• মোট খরচ (ডেবিট -): ৳${totalExpenseDebit.toStringAsFixed(2)}',
                     style: const TextStyle(
                         fontFamily: 'NikoshBAN',
                         fontSize: 13,
@@ -458,7 +448,7 @@ Future<void> _generateRepaintedDebitCreditPdf({
                         fontWeight: FontWeight.w600),
                   ),
                   Text(
-                    'মোট ডেবিট (-): ৳${totalDebit.toStringAsFixed(2)}',
+                    'মোট ডেবিট (লাভ + খরচ): ৳${totalDebit.toStringAsFixed(2)}',
                     style: const TextStyle(
                         fontFamily: 'NikoshBAN',
                         fontSize: 14,
@@ -467,7 +457,7 @@ Future<void> _generateRepaintedDebitCreditPdf({
                   ),
                   const Divider(height: 12),
                   Text(
-                    'নিট তহবিল ব্যালেন্স: ৳${netBalance.toStringAsFixed(2)}',
+                    'নিট ব্যালেন্স (ক্রেডিট - ডেবিট): ৳${netBalance.toStringAsFixed(2)}',
                     style: TextStyle(
                       fontFamily: 'NikoshBAN',
                       fontSize: 15,
@@ -486,7 +476,7 @@ Future<void> _generateRepaintedDebitCreditPdf({
               columnWidths: const {
                 0: FixedColumnWidth(105),
                 1: FlexColumnWidth(),
-                2: FixedColumnWidth(80),
+                2: FixedColumnWidth(85),
                 3: FixedColumnWidth(105),
                 4: FixedColumnWidth(105),
               },
@@ -578,7 +568,7 @@ Future<void> _generateRepaintedDebitCreditPdf({
     final bytes = await pdf.save();
     final dir = await getApplicationDocumentsDirectory();
     final fileName =
-        'Debit_Credit_Statement_${DateTime.now().millisecondsSinceEpoch}.pdf';
+        'Datewise_Debit_Credit_Statement_${DateTime.now().millisecondsSinceEpoch}.pdf';
     final file = File('${dir.path}/$fileName');
     await file.writeAsBytes(bytes);
     await OpenFile.open(file.path);
