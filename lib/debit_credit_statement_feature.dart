@@ -31,7 +31,7 @@ Future<void> showDebitCreditStatementDialog({
         double totalBusinessExpenseDebit = 0.0;
         double totalProfitDistributionDebit = 0.0;
 
-        final List> entries = [];
+        final entries = [];
 
         for (final member in members) {
           for (final tx in member.transactions) {
@@ -298,7 +298,7 @@ Future<void> _generateDebitCreditPdf({
   required double totalCredit,
   required double totalDebit,
   required double netBalance,
-  required List> entries,
+  required List entries,
 }) async {
   String fmtDate(DateTime d) =>
       '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
