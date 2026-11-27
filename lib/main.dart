@@ -16,6 +16,7 @@ import 'due_reminder_feature.dart';
 import 'net_capital_feature.dart';
 import 'pdf_report_generator.dart';
 import 'document_upload_screen.dart';
+import 'debit_credit_statement_feature.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -3572,6 +3573,30 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       icon: const Icon(Icons.notifications_active, size: 16),
                       label: const Text(
                         "বকেয়া রিমাইন্ডার ও নোটিশ",
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.indigo.shade800,
+                        side: BorderSide(color: Colors.indigo.shade800),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                      onPressed: () {
+                        showDebitCreditStatementDialog(
+                          context: context,
+                          societyName: globalSocietyName,
+                          members: globalMembers,
+                          businessRecords: globalBusinessRecords,
+                        );
+                      },
+                      icon: const Icon(Icons.account_balance_wallet_outlined, size: 16),
+                      label: const Text(
+                        "ডেবিট–ক্রেডিট স্টেটমেন্ট",
                         style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                       ),
                     ),
