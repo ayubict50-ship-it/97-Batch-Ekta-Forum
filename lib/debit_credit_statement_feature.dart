@@ -1,9 +1,10 @@
-
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:open_file/open_file.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import 'main.dart';
 
 Future<void> showDebitCreditStatementDialog({
@@ -369,5 +370,11 @@ Future<void> _generateDebitCreditPdf({
     ),
   );
 
-  await Printing.layoutPdf(onLayout: (format) async => pdf.save());
+  final bytes = await pdf.save();
+  final dir = await getApplicationDocumentsDirectory();
+  final fileName =
+      'Debit_Credit_Statement_${DateTime.now().millisecondsSinceEpoch}.pdf';
+  final file = File('${dir.path}/$fileName');
+  await file.writeAsBytes(bytes);
+  await OpenFile.open(file.path);
 }
