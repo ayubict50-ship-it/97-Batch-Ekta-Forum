@@ -306,7 +306,7 @@ Future<void> _generateDebitCreditPdf({
 
   pw.Font? bengaliFont;
   try {
-    final fontData = await rootBundle.load('assets/fonts/NikoshBAN.ttf')
+    final fontData = await rootBundle.load('assets/fonts/NikoshBAN.ttf');
     bengaliFont = pw.Font.ttf(fontData);
   } catch (_) {}
 
