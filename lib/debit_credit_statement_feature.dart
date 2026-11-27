@@ -120,7 +120,7 @@ Future<void> showDebitCreditStatementDialog({
                             setDialogState(() => startDate = picked);
                           }
                         },
-                        child: const Text("তারিখ দিন", style: const TextStyle(fontSize: 12)),
+                        child: const Text("তারিখ দিন", style: TextStyle(fontSize: 12)),
                       ),
                     ],
                   ),
@@ -141,7 +141,7 @@ Future<void> showDebitCreditStatementDialog({
                             setDialogState(() => endDate = picked);
                           }
                         },
-                        child: const Text("তারিখ দিন", style: const TextStyle(fontSize: 12)),
+                        child: const Text("তারিখ দিন", style: TextStyle(fontSize: 12)),
                       ),
                     ],
                   ),
